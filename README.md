@@ -23,4 +23,4 @@
 - Windows 10/11
 - PowerShell 5.1 trở lên
 - Quyền quản trị viên
-PS: 4 :)
+- PS/  4444444 :))

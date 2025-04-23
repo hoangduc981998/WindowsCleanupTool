@@ -940,3 +940,143 @@ function Start-Cleanup {
             }
         }
     }
+# Hoàn tất quá trình dọn dẹp
+    $progressBar.Value = 100
+    Write-Log "Quá trình dọn dẹp đã hoàn tất!"
+    Write-Log "Tổng cộng đã thực hiện $completedTasks tác vụ."
+    
+    # Hiển thị kết quả
+    $diskInfoAfter = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | 
+                    Select-Object DeviceID, 
+                        @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace / 1GB, 2)}}
+    
+    foreach ($disk in $diskInfoAfter) {
+        $diskBefore = $diskInfo | Where-Object { $_.DeviceID -eq $disk.DeviceID }
+        if ($diskBefore) {
+            $spaceSaved = $disk.'FreeSpace(GB)' - $diskBefore.'FreeSpace(GB)'
+            if ($spaceSaved -gt 0) {
+                Write-Log "Ổ đĩa $($disk.DeviceID): Đã giải phóng $spaceSaved GB không gian"
+            }
+        }
+    }
+    
+    # Khôi phục trạng thái nút
+    $startButton.Enabled = $true
+    $cancelButton.Enabled = $false
+    
+    # Hiển thị thông báo hoàn tất
+    [System.Windows.Forms.MessageBox]::Show("Quá trình dọn dẹp đã hoàn tất! Đã thực hiện $completedTasks tác vụ.", "Hoàn tất", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+}
+
+# Xử lý sự kiện khi nhấn nút Start
+$startButton.Add_Click({
+    Start-Cleanup
+})
+
+# Xử lý sự kiện khi nhấn nút Cancel
+$cancelButton.Add_Click({
+    Write-Log "Đang hủy quá trình dọn dẹp..."
+    # Thêm mã để hủy quá trình dọn dẹp nếu cần
+    $startButton.Enabled = $true
+    $cancelButton.Enabled = $false
+})
+
+# Xử lý tiện ích
+$tabUtilities.Controls | Where-Object { $_ -is [System.Windows.Forms.Button] } | ForEach-Object {
+    $button = $_
+    $button.Add_Click({
+        $utilityTag = $this.Tag
+        
+        switch ($utilityTag) {
+            "DiskAnalysis" {
+                Write-Log "Đang phân tích không gian đĩa..."
+                Start-Process "cleanmgr.exe" -ArgumentList "/d $env:SystemDrive"
+            }
+            "BackupRegistry" {
+                Write-Log "Đang sao lưu Registry..."
+                $backupPath = "$env:USERPROFILE\Desktop\RegistryBackup_$(Get-Date -Format 'yyyyMMdd_HHmmss').reg"
+                $process = Start-Process -FilePath "reg.exe" -ArgumentList "export HKLM $backupPath" -NoNewWindow -PassThru -Wait
+                if ($process.ExitCode -eq 0) {
+                    Write-Log "✅ Đã sao lưu Registry vào: $backupPath"
+                    [System.Windows.Forms.MessageBox]::Show("Đã sao lưu Registry thành công vào:`n$backupPath", "Sao lưu hoàn tất", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                } else {
+                    Write-Log "❌ Không thể sao lưu Registry"
+                }
+            }
+            "StartupManager" {
+                Write-Log "Đang mở Startup Manager..."
+                Start-Process "taskmgr.exe" -ArgumentList "/7 /startup"
+            }
+            "SystemInfo" {
+                Write-Log "Đang mở System Information..."
+                Start-Process "msinfo32.exe"
+            }
+            "DiskHealth" {
+                Write-Log "Đang kiểm tra sức khỏe ổ đĩa..."
+                $process = Start-Process -FilePath "powershell.exe" -ArgumentList "-Command Get-PhysicalDisk | Get-StorageReliabilityCounter | Format-Table DeviceId, Temperature, Wear, ReadErrorsTotal, WriteErrorsTotal, PowerOnHours -AutoSize" -NoNewWindow -PassThru -Wait
+            }
+            "ScheduledCleanup" {
+                Write-Log "Đang thiết lập dọn dẹp tự động định kỳ..."
+                $taskName = "WindowsSmartCleanup"
+                $taskPath = "$PSCommandPath"
+                
+                # Kiểm tra xem tác vụ đã tồn tại chưa
+                $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                
+                if ($existingTask) {
+                    $choice = [System.Windows.Forms.MessageBox]::Show("Tác vụ dọn dẹp tự động đã tồn tại. Bạn có muốn cập nhật không?", "Tác vụ đã tồn tại", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+                    if ($choice -eq [System.Windows.Forms.DialogResult]::No) {
+                        return
+                    }
+                    
+                    # Xóa tác vụ hiện có
+                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+                }
+                
+                # Tạo một tác vụ mới
+                $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskPath`" -Automatic"
+                $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 2am
+                $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+                
+                Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -User "SYSTEM" | Out-Null
+                
+                Write-Log "✅ Đã thiết lập dọn dẹp tự động vào 2 giờ sáng mỗi Chủ Nhật"
+                [System.Windows.Forms.MessageBox]::Show("Đã thiết lập dọn dẹp tự động vào 2 giờ sáng mỗi Chủ Nhật", "Thiết lập hoàn tất", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            }
+            "FixCommonIssues" {
+                Write-Log "Đang sửa lỗi Windows phổ biến..."
+                
+                # Sửa Windows Update
+                Write-Log "Đang sửa lỗi Windows Update..."
+                Start-Process -FilePath "powershell.exe" -ArgumentList "-Command & {Stop-Service -Name wuauserv, bits, cryptsvc -Force; Remove-Item -Path $env:SystemRoot\SoftwareDistribution\* -Recurse -Force -ErrorAction SilentlyContinue; Start-Service -Name wuauserv, bits, cryptsvc}" -NoNewWindow -Wait
+                
+                # Sửa chữa các tệp hệ thống bị hỏng
+                Write-Log "Đang sửa chữa các tệp hệ thống bị hỏng..."
+                Start-Process -FilePath "sfc.exe" -ArgumentList "/scannow" -NoNewWindow -Wait
+                
+                # Sửa chữa image hệ thống
+                Write-Log "Đang sửa chữa image hệ thống..."
+                Start-Process -FilePath "DISM.exe" -ArgumentList "/Online /Cleanup-Image /RestoreHealth" -NoNewWindow -Wait
+                
+                Write-Log "✅ Đã hoàn tất sửa lỗi Windows phổ biến"
+                [System.Windows.Forms.MessageBox]::Show("Đã hoàn tất sửa lỗi Windows phổ biến!", "Sửa lỗi hoàn tất", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            }
+            "DiskPartition" {
+                Write-Log "Đang mở công cụ quản lý phân vùng ổ đĩa..."
+                Start-Process "diskmgmt.msc"
+            }
+        }
+    })
+}
+
+# Thêm các thành phần vào form
+$form.Controls.Add($headerPanel)
+$form.Controls.Add($tabControl)
+$form.Controls.Add($systemInfoPanel)
+$form.Controls.Add($progressBar)
+$form.Controls.Add($startButton)
+$form.Controls.Add($cancelButton)
+$form.Controls.Add($logBox)
+
+# Hiển thị form
+$form.ShowDialog() | Out-Null

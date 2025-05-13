@@ -1,6 +1,6 @@
 # CleanUpTool.ps1 - Phiên bản đã tối ưu, sửa lỗi, giữ đầy đủ chức năng
 # Tác giả: hoangduc981998
-# Cập nhật: 2025
+# Cập nhật: 14.5.2025
 
 # Lưu file này với tên CleanUpTool.ps1
 # Chạy PowerShell với quyền Admin và gõ: Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
@@ -501,182 +501,13 @@ function Start-SystemRepair {
     }
 }
 
-# Hàm cập nhật thanh trạng thái ổ đĩa
-function Update-DiskStatusBar {
-    $updatedDiskInfo = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" |
-                       Select-Object DeviceID, @{Name="FreeSpace";Expression={$_.FreeSpace}},
-                                     @{Name="Size";Expression={$_.Size}},
-                                     @{Name="PercentFree";Expression={[math]::Round(($_.FreeSpace / $_.Size) * 100, 1)}}
-    
-    foreach ($disk in $updatedDiskInfo) {
-        if ($diskBars.ContainsKey($disk.DeviceID)) {
-            $percentUsed = 100 - $disk.PercentFree
-            $diskBars[$disk.DeviceID].Value = [int]$percentUsed
-            
-            $usedColor = if ($percentUsed -gt 90) { [System.Drawing.Color]::Firebrick } 
-                         elseif ($percentUsed -gt 80) { [System.Drawing.Color]::DarkOrange } 
-                         else { [System.Drawing.Color]::ForestGreen }
-            
-            # Cập nhật nhãn
-            $diskLabels[$disk.DeviceID].Text = "$($disk.DeviceID): $($disk.PercentFree)% trống"
-            
-            # Cập nhật Tooltip
-            $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-            $totalGB = [math]::Round($disk.Size / 1GB, 2)
-            $tooltip.SetToolTip($diskBars[$disk.DeviceID], "$($disk.DeviceID) - $freeGB GB trống / $totalGB GB tổng - $($disk.PercentFree)% trống")
-        }
-    }
-}
 
-function Start-Cleanup {
-    # Khởi tạo các biến dịch vụ ở đây để truy cập được từ mọi case
-    $services = @{
-        "DiagTrack" = "Disabled"
-        "dmwappushservice" = "Disabled"
-        "SysMain" = "Disabled"
-        "WSearch" = "Disabled"
-    }
-
-    # Khóa nút và bật nút hủy
-    $form.Invoke([Action]{
-        $startButton.Enabled = $false
-        $cancelButton.Enabled = $true
-        $progressBar.Value = 0
-        $subProgressBar.Visible = $false
-        $currentTaskLabel.Text = ""
-    })
-
-    Write-Log "Bắt đầu quá trình dọn dẹp..." -color [System.Drawing.Color]::Blue
-
-    # Lấy danh sách các tác vụ được chọn
-    $selectedTasks = @{}
-    $checkboxes.Keys | ForEach-Object { if ($checkboxes[$_].Checked) { $selectedTasks[$_] = $checkboxes[$_].Text } }
-    $advancedCheckboxes.Keys | ForEach-Object { if ($advancedCheckboxes[$_].Checked) { $selectedTasks[$_] = $advancedCheckboxes[$_].Text } }
-    $optimizeCheckboxes.Keys | ForEach-Object { if ($optimizeCheckboxes[$_].Checked) { $selectedTasks[$_] = $optimizeCheckboxes[$_].Text } }
-    $securityCheckboxes.Keys | ForEach-Object { if ($securityCheckboxes[$_].Checked) { $selectedTasks[$_] = $securityCheckboxes[$_].Text } }
-    $privacyCheckboxes.Keys | ForEach-Object { if ($privacyCheckboxes[$_].Checked) { $selectedTasks[$_] = $privacyCheckboxes[$_].Text } }
-
-    $totalTasks = $selectedTasks.Count
-    $completedTasks = 0
-
-    # Thiết lập progress bar
-    $form.Invoke([Action]{
-        $progressBar.Maximum = [Math]::Max($totalTasks, 1)
-        $progressBar.Value = 0
-        $subProgressBar.Maximum = 100
-        $subProgressBar.Value = 0
-    })
-
-    # Lưu thông tin ổ đĩa trước khi dọn dẹp
-    $diskInfoBefore = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" |
-                      Select-Object DeviceID, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace / 1GB, 2)}}
-
-    # Các biến theo dõi tác vụ
-    $skippedTasks = @()
-    $failedTasks = @()
-    $successTasks = @()
-
-    # Thực hiện các tác vụ
-    foreach ($key in $selectedTasks.Keys) {
-        $completedTasks++
-        $form.Invoke([Action]{
-            $progressBar.Value = $completedTasks
-            $currentTaskLabel.Text = "Tác vụ $completedTasks/$totalTasks"
-        })
-        
-        $taskText = $selectedTasks[$key]
-        Write-Log "Đang thực hiện ($completedTasks/$totalTasks): $taskText..." -color [System.Drawing.Color]::DarkBlue
-        $success = $true
-
-        try {
-            # Đặt subProgressBar thành 0 cho mỗi tác vụ mới
-            $form.Invoke([Action]{
-                $subProgressBar.Visible = $true
-                $subProgressBar.Value = 0
-            })
-
-            # ---- Đây là phần switch-case của bản gốc, giữ nguyên logic chỉ thêm các lệnh update sub-task ----
-            switch ($key) {
-                "TempFiles" {
-                    Update-SubTask "Đang xóa thư mục Temp của Windows..." 0
-                    try {
-                        Remove-Item -Path "$env:TEMP\*" -Force -Recurse -ErrorAction Stop
-                        Update-SubTask "Đang xóa thư mục Temp của hệ thống..." 50
-                        Remove-Item -Path "$env:windir\Temp\*" -Force -Recurse -ErrorAction Stop
-                        Update-SubTask "Đã xóa xong các thư mục Temp" 100
-                    } catch {
-                        Write-Log "❌ Không thể xóa file tạm: $($_.Exception.Message)" -color [System.Drawing.Color]::Red
-                        $success = $false
-                    }
-                }
-                # ... [switch-case của bản gốc, mỗi bước có thể thêm lệnh Update-SubTask] ...
-            }
-
-            # Sau mỗi tác vụ, cập nhật thanh trạng thái ổ đĩa để hiển thị không gian đã dọn dẹp
-            Update-DiskStatusBar
-            
-        } catch {
-            Write-Log "❌ Lỗi không xác định khi chạy tác vụ ${taskText}: $($_.Exception.Message)" -color [System.Drawing.Color]::Red
-            $success = $false
-        }
-        
-        # Ghi lại tình trạng tác vụ
-        if ($success -eq "Skip") {
-            $skippedTasks += $taskText
-        } elseif ($success -eq $false) {
-            $failedTasks += $taskText
-        } else {
-            $successTasks += $taskText
-        }
-    }
-
-    # Ẩn progress bar phụ khi hoàn tất
-    $form.Invoke([Action]{
-        $subProgressBar.Visible = $false
-        $currentTaskLabel.Text = ""
-    })
-
-    # Tổng kết các tác vụ
-    if ($skippedTasks.Count -gt 0) {
-        Write-Log "Tác vụ bị bỏ qua: $($skippedTasks -join ', ')" -color [System.Drawing.Color]::Orange
-    }
-    if ($failedTasks.Count -gt 0) {
-        Write-Log "Tác vụ lỗi: $($failedTasks -join ', ')" -color [System.Drawing.Color]::Red
-    }
-    if ($successTasks.Count -gt 0) {
-        Write-Log "Tác vụ thành công: $($successTasks -join ', ')" -color [System.Drawing.Color]::Green
-    }
-    
-    # So sánh không gian đĩa trước và sau khi dọn dẹp
-    $diskInfoAfter = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" |
-                     Select-Object DeviceID, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace / 1GB, 2)}}
-    
-    Write-Log "`nKết quả dọn dẹp:" -color [System.Drawing.Color]::Blue
-    foreach ($disk in $diskInfoBefore) {
-        $diskAfter = $diskInfoAfter | Where-Object { $_.DeviceID -eq $disk.DeviceID }
-        if ($diskAfter) {
-            $freed = [math]::Round($diskAfter.'FreeSpace(GB)' - $disk.'FreeSpace(GB)', 2)
-            $sign = if ($freed -ge 0) { "+" } else { "" }  # Dấu + cho số dương, - tự hiện cho số âm
-            $color = if ($freed -gt 0) { [System.Drawing.Color]::Green } elseif ($freed -lt 0) { [System.Drawing.Color]::Red } else { [System.Drawing.Color]::Black }
-            Write-Log "  Ổ đĩa $($disk.DeviceID): ${sign}${freed} GB (từ $($disk.'FreeSpace(GB)') GB đến $($diskAfter.'FreeSpace(GB)') GB)" -color $color
-        }
-    }
-    
-    # Cập nhật thanh trạng thái ổ đĩa một lần nữa để đảm bảo chính xác
-    Update-DiskStatusBar
-    
-    Write-Log "`nHoàn tất quá trình dọn dẹp!" -color [System.Drawing.Color]::Blue
-    $form.Invoke([Action]{
-        $startButton.Enabled = $true
-        $cancelButton.Enabled = $false
-    })
-}
 
 # -- 4. Xây dựng giao diện --
 # 4.1 Form chính 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Công cụ dọn dẹp hàng Nỏ :))"
-$form.Size = New-Object System.Drawing.Size(800, 770)
+$form.Size = New-Object System.Drawing.Size(800, 970)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
@@ -1094,7 +925,7 @@ $tabServices.Controls.Add($enableServiceButton)
 # ListView cho các ứng dụng khởi động
 $startupLabel = New-Object System.Windows.Forms.Label
 $startupLabel.Location = New-Object System.Drawing.Point(10, 280)
-$startupLabel.Size = New-Object System.Drawing.Size(540, 25)
+$startupLabel.Size = New-Object System.Drawing.Size(740, 25)
 $startupLabel.Text = "Ứng dụng khởi động cùng Windows:"
 $startupLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $tabServices.Controls.Add($startupLabel)
@@ -1308,59 +1139,6 @@ $tabControl.Add_SelectedIndexChanged({
     }
 })
 
-# --- Tạo thanh trạng thái không gian ổ đĩa ---
-$diskStatusPanel = New-Object System.Windows.Forms.Panel
-$diskStatusPanel.Location = New-Object System.Drawing.Point(10, 525)
-$diskStatusPanel.Size = New-Object System.Drawing.Size(770, 25)
-$diskStatusPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::None
-$diskStatusPanel.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 245)
-
-$diskBars = @{}
-$diskLabels = @{}
-
-# Khởi tạo dữ liệu ổ đĩa
-$diskInfo = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" |
-            Select-Object DeviceID, @{Name="Size";Expression={$_.Size}},
-                          @{Name="FreeSpace";Expression={$_.FreeSpace}},
-                          @{Name="PercentFree";Expression={[math]::Round(($_.FreeSpace / $_.Size) * 100, 1)}}
-
-$xPosition = 5
-$barWidth = [math]::Floor((770 - ($diskInfo.Count * 10)) / $diskInfo.Count)
-
-foreach ($disk in $diskInfo) {
-    $percentUsed = 100 - $disk.PercentFree
-    $usedColor = if ($percentUsed -gt 90) { [System.Drawing.Color]::Firebrick } 
-                 elseif ($percentUsed -gt 80) { [System.Drawing.Color]::DarkOrange } 
-                 else { [System.Drawing.Color]::ForestGreen }
-    
-    $diskProgressBar = New-Object System.Windows.Forms.ProgressBar
-    $diskProgressBar.Location = New-Object System.Drawing.Point($xPosition, 0)
-    $diskProgressBar.Size = New-Object System.Drawing.Size($barWidth, 15)
-    $diskProgressBar.Style = [System.Windows.Forms.ProgressBarStyle]::Continuous
-    $diskProgressBar.Value = [int]$percentUsed
-    $diskProgressBar.ForeColor = $usedColor
-    $diskStatusPanel.Controls.Add($diskProgressBar)
-    
-    $diskLabel = New-Object System.Windows.Forms.Label
-    $diskLabel.Location = New-Object System.Drawing.Point($xPosition, 18)
-    $diskLabel.Size = New-Object System.Drawing.Size($barWidth, 15)
-    $diskLabel.Text = "$($disk.DeviceID): $($disk.PercentFree)% trống"
-    $diskLabel.Font = New-Object System.Drawing.Font("Segoe UI", 7)
-    $diskLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $diskStatusPanel.Controls.Add($diskLabel)
-    
-    $diskBars[$disk.DeviceID] = $diskProgressBar
-    $diskLabels[$disk.DeviceID] = $diskLabel
-    
-    $xPosition += $barWidth + 10
-    
-    # Thêm Tooltip
-    $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-    $totalGB = [math]::Round($disk.Size / 1GB, 2)
-    $tooltip.SetToolTip($diskProgressBar, "$($disk.DeviceID) - $freeGB GB trống / $totalGB GB tổng - $($disk.PercentFree)% trống")
-}
-$form.Controls.Add($diskStatusPanel)
-
 # 4.7 Panel thông tin hệ thống
 $systemInfoPanel = New-Object System.Windows.Forms.Panel
 $systemInfoPanel.Location = New-Object System.Drawing.Point(10, 480)
@@ -1411,6 +1189,7 @@ $systemInfoPanel.Controls.Add($diskInfoLabel)
 $controlPanel = New-Object System.Windows.Forms.Panel
 $controlPanel.Location = New-Object System.Drawing.Point(10, 595) # ĐÃ ĐIỀU CHỈNH Y
 $controlPanel.Size = New-Object System.Drawing.Size(775, 160)
+
 # --- Panel điều khiển cải tiến ---
 $controlPanel = New-Object System.Windows.Forms.Panel
 $controlPanel.Location = New-Object System.Drawing.Point(10, 555)
@@ -1526,9 +1305,12 @@ function Start-Cleanup {
     $form.Invoke([Action]{
         $startButton.Enabled = $false
         $cancelButton.Enabled = $true
+        $progressBar.Value = 0
+        $subProgressBar.Visible = $false   # THÊM DÒNG NÀY
+        $currentTaskLabel.Text = ""        # THÊM DÒNG NÀY
     })
 
-    Write-Log "Bắt đầu quá trình dọn dẹp..."
+    Write-Log "Bắt đầu quá trình dọn dẹp..." -color ([System.Drawing.Color]::Blue)
 
     # Lấy danh sách các tác vụ được chọn
     $selectedTasks = @{}
@@ -1545,6 +1327,8 @@ function Start-Cleanup {
     $form.Invoke([Action]{
         $progressBar.Maximum = [Math]::Max($totalTasks, 1)
         $progressBar.Value = 0
+		$subProgressBar.Maximum = 100
+		 $subProgressBar.Value = 0
     })
 
     # Lưu thông tin ổ đĩa trước khi dọn dẹp
@@ -1554,24 +1338,59 @@ function Start-Cleanup {
     # Các biến theo dõi tác vụ
     $skippedTasks = @()
     $failedTasks = @()
+	$successTasks = @()
 
+    # Định nghĩa hàm cập nhật tác vụ con
+    function Update-SubTask {
+        param(
+            [string]$TaskName,
+            [int]$Progress = -1
+        )
+        
+        if ($Progress -ge 0) {
+            $form.Invoke([Action]{
+                $subProgressBar.Visible = $true
+                $subProgressBar.Value = $Progress
+                $currentTaskLabel.Text = $TaskName
+            })
+        } else {
+            $form.Invoke([Action]{
+                $currentTaskLabel.Text = $TaskName
+            })
+        }
+    }
+	
     # Thực hiện các tác vụ
     foreach ($key in $selectedTasks.Keys) {
         $completedTasks++
-        $form.Invoke([Action]{ $progressBar.Value = $completedTasks })
+        $form.Invoke([Action]{
+            $progressBar.Value = $completedTasks
+            $currentTaskLabel.Text = "Tác vụ $completedTasks/$totalTasks"   # THÊM DÒNG NÀY
+        })
+        
         $taskText = $selectedTasks[$key]
-        Write-Log "Đang thực hiện ($completedTasks/$totalTasks): $taskText..."
-        $success = $true # Biến cờ để theo dõi thành công
+        Write-Log "Đang thực hiện ($completedTasks/$totalTasks): $taskText..." -color [System.Drawing.Color]::DarkBlue
+        $success = $true
 
+        try {
+            # Đặt subProgressBar thành 0 cho mỗi tác vụ mới  # THÊM ĐOẠN CODE SAU
+            $form.Invoke([Action]{
+                $subProgressBar.Visible = $true
+                $subProgressBar.Value = 0
+            })
+			
         try {
             switch ($key) {
                 # --- Dọn dẹp cơ bản ---
                 "TempFiles" {
+					Update-SubTask "Đang xóa thư mục Temp của Windows..." 0
                     try {
                         Remove-Item -Path "$env:TEMP\*" -Force -Recurse -ErrorAction Stop
+						Update-SubTask "Đang xóa thư mục Temp của hệ thống..." 50
                         Remove-Item -Path "$env:windir\Temp\*" -Force -Recurse -ErrorAction Stop
+						Update-SubTask "Đã xóa xong các thư mục Temp" 100
                     } catch {
-                        Write-Log "❌ Không thể xóa file tạm: $($_.Exception.Message)"
+                        Write-Log "❌ Không thể xóa file tạm: $($_.Exception.Message)" -color [System.Drawing.Color]::Red
                         $success = $false
                     }
                 }
@@ -2175,34 +1994,48 @@ function Start-Cleanup {
                 }
             }
         } catch {
-            Write-Log "❌ Lỗi không xác định khi chạy tác vụ $taskText`: $($_.Exception.Message)"
+            Write-Log "❌ Lỗi không xác định khi chạy tác vụ ${taskText}: $($_.Exception.Message)" -color [System.Drawing.Color]::Red
             $success = $false
         }
         
         # Ghi lại tình trạng tác vụ
         if ($success -eq "Skip") { $skippedTasks += $taskText }
         elseif ($success -eq $false) { $failedTasks += $taskText }
+		else { $successTasks += $taskText }
     }
 
-    # Tổng kết các tác vụ bị skip/lỗi
-    if ($skippedTasks.Count -gt 0) { Write-Log "Tác vụ bị bỏ qua: $($skippedTasks -join ', ')" }
-    if ($failedTasks.Count -gt 0) { Write-Log "Tác vụ lỗi: $($failedTasks -join ', ')" }
-    
-    # So sánh không gian đĩa trước và sau khi dọn dẹp
-    $diskInfoAfter = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" |
-                     Select-Object DeviceID, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace / 1GB, 2)}}
-    
-    Write-Log "`nKết quả dọn dẹp:"
+    # Ẩn progress bar phụ khi hoàn tất
+    $form.Invoke([Action]{
+        $subProgressBar.Visible = $false
+        $currentTaskLabel.Text = ""
+    })
+
+    # Tổng kết các tác vụ
+    if ($skippedTasks.Count -gt 0) {
+        Write-Log "Tác vụ bị bỏ qua: $($skippedTasks -join ', ')" -color [System.Drawing.Color]::Orange
+    }
+    if ($failedTasks.Count -gt 0) {
+        Write-Log "Tác vụ lỗi: $($failedTasks -join ', ')" -color [System.Drawing.Color]::Red
+    }
+    if ($successTasks.Count -gt 0) {  # THÊM ĐOẠN NÀY
+        Write-Log "Tác vụ thành công: $($successTasks -join ', ')" -color [System.Drawing.Color]::Green
+    }
+
+    # Thêm tham số -color cho các Write-Log và thêm colors cho kết quả
+    Write-Log "`nKết quả dọn dẹp:" -color [System.Drawing.Color]::Blue
     foreach ($disk in $diskInfoBefore) {
         $diskAfter = $diskInfoAfter | Where-Object { $_.DeviceID -eq $disk.DeviceID }
         if ($diskAfter) {
             $freed = [math]::Round($diskAfter.'FreeSpace(GB)' - $disk.'FreeSpace(GB)', 2)
-            $sign = if ($freed -ge 0) { "+" } else { "" }  # Dấu + cho số dương, - tự hiện cho số âm
-            Write-Log "  Ổ đĩa $($disk.DeviceID): $sign$freed GB (từ $($disk.'FreeSpace(GB)') GB đến $($diskAfter.'FreeSpace(GB)') GB)"
+            $sign = if ($freed -ge 0) { "+" } else { "" }
+            $color = if ($freed -gt 0) { [System.Drawing.Color]::Green } 
+                     elseif ($freed -lt 0) { [System.Drawing.Color]::Red } 
+                     else { [System.Drawing.Color]::Black }
+            Write-Log "  Ổ đĩa $($disk.DeviceID): ${sign}${freed} GB (từ $($disk.'FreeSpace(GB)') GB đến $($diskAfter.'FreeSpace(GB)') GB)" -color $color
         }
     }
     
-    Write-Log "`nHoàn tất quá trình dọn dẹp!"
+    Write-Log "`nHoàn tất quá trình dọn dẹp!" -color [System.Drawing.Color]::Blue
     $form.Invoke([Action]{
         $startButton.Enabled = $true
         $cancelButton.Enabled = $false

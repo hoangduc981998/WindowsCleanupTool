@@ -1,6 +1,6 @@
 # CleanUpTool.ps1 - Phiên bản đã tối ưu, sửa lỗi, giữ đầy đủ chức năng
 # Tác giả: hoangduc981998
-# Cập nhật: 14.5.2025
+# Cập nhật: 2025
 
 # Lưu file này với tên CleanUpTool.ps1
 # Chạy PowerShell với quyền Admin và gõ: Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
@@ -42,10 +42,19 @@ function Create-RoundedButton {
 
 function Safe-RestartExplorer {
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-    # Đợi explorer đóng hoàn toàn
+    
+    # Đợi explorer đóng hoàn toàn với timeout
+    $timeout = 10 # seconds
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    
     while (Get-Process explorer -ErrorAction SilentlyContinue) {
+        if ($timer.Elapsed.TotalSeconds -gt $timeout) {
+            Write-Log "Cảnh báo: Không thể đóng explorer.exe sau $timeout giây"
+            break
+        }
         Start-Sleep -Milliseconds 200
     }
+    
     Start-Sleep -Seconds 1
     Start-Process explorer
 }
@@ -70,108 +79,605 @@ function Write-Log {
     }
 }
 
-# Hàm phân tích dịch vụ Windows và đưa ra gợi ý
-function Get-ServiceRecommendations {
-    # Nhóm các dịch vụ theo mức độ an toàn khi tắt
-    $safeToDisable = @{
-        "DiagTrack" = "Connected User Experiences and Telemetry - Thu thập dữ liệu sử dụng"
-        "dmwappushservice" = "Device Management Wireless Application Protocol - Chỉ cần cho WAP Push Message Routing Service"
-        "HomeGroupListener" = "HomeGroup Listener - Không cần nếu không dùng HomeGroup"
-        "HomeGroupProvider" = "HomeGroup Provider - Không cần nếu không dùng HomeGroup"
-        "SysMain" = "SysMain/Superfetch - Trên SSD không cần thiết"
-        "WSearch" = "Windows Search - Có thể tắt nếu không thường xuyên tìm kiếm"
-        "XblAuthManager" = "Xbox Live Auth Manager - Chỉ cần nếu dùng Xbox app"
-        "XblGameSave" = "Xbox Live Game Save - Chỉ cần nếu lưu game Xbox"
-        "XboxNetApiSvc" = "Xbox Live Networking - Chỉ cần nếu chơi game Xbox"
-        "lfsvc" = "Geolocation Service - Dịch vụ định vị"
-        "MapsBroker" = "Downloaded Maps Manager - Chỉ cần nếu dùng Maps offline"
-        "PcaSvc" = "Program Compatibility Assistant - Có thể tắt sau khi cài đặt các phần mềm"
-        "RemoteRegistry" = "Remote Registry - Chỉ cần khi quản trị từ xa"
-        "RetailDemo" = "Retail Demo Service - Chỉ dùng cho máy trưng bày"
-        "TrkWks" = "Distributed Link Tracking Client - Theo dõi liên kết file trên mạng"
-        "WbioSrvc" = "Windows Biometric Service - Chỉ cần nếu dùng nhận dạng sinh trắc học"
-        "wisvc" = "Windows Insider Service - Chỉ cần cho Windows Insider"
-        "WMPNetworkSvc" = "Windows Media Player Network Sharing - Chia sẻ thư viện media"
-    }
-
-    $carefulServices = @{
-        "Spooler" = "Print Spooler - Cần thiết cho in ấn"
-        "LanmanServer" = "Server - Cần thiết cho chia sẻ file và máy in"
-        "BITS" = "Background Intelligent Transfer Service - Cần cho Windows Update"
-        "wuauserv" = "Windows Update - Cần cho cập nhật hệ thống"
-        "EventLog" = "Windows Event Log - Ghi nhật ký hệ thống quan trọng"
-        "AppXSvc" = "AppX Deployment Service - Cần cho ứng dụng Microsoft Store"
-    }
-
-    # Thu thập thông tin phần cứng để đưa ra gợi ý phù hợp
-    $cpuInfo = Get-CimInstance Win32_Processor
-    $ramInfo = Get-CimInstance Win32_ComputerSystem
-    $totalRam = [math]::Round($ramInfo.TotalPhysicalMemory / 1GB, 0)
-    $diskInfo = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Where-Object { $_.DeviceID -eq "C:" }
-    $isSSD = $false
-
-    # Kiểm tra xem ổ đĩa có phải SSD không
-    $diskDrive = Get-CimInstance -ClassName Win32_DiskDrive | Where-Object { $_.Model -like "*SSD*" }
-    if ($diskDrive) {
-        $isSSD = $true
-    }
-
-    # Danh sách dịch vụ đề xuất tắt dựa trên cấu hình
-    $recommendations = @{}
-
-    # Thêm các dịch vụ an toàn vào danh sách đề xuất
-    foreach ($service in $safeToDisable.Keys) {
-        $recommendations[$service] = @{
-            Description = $safeToDisable[$service]
-            Recommendation = "Có thể tắt"
-            Level = "Safe"
-        }
-    }
-
-    # Điều chỉnh đề xuất dựa trên phần cứng
-    # Ví dụ: SysMain hữu ích trên HDD nhưng không cần thiết trên SSD
-    if ($isSSD) {
-        $recommendations["SysMain"].Recommendation = "Nên tắt (SSD đã nhanh)"
-    } else {
-        $recommendations["SysMain"].Recommendation = "Nên để nếu RAM < 8GB"
-        $recommendations["SysMain"].Level = "Careful"
-    }
-
-    # Nếu RAM ít, tắt một số dịch vụ không cần thiết
-    if ($totalRam -lt 8) {
-        $recommendations["XblAuthManager"].Recommendation = "Nên tắt (tiết kiệm RAM)"
-        $recommendations["XblGameSave"].Recommendation = "Nên tắt (tiết kiệm RAM)"
-        $recommendations["XboxNetApiSvc"].Recommendation = "Nên tắt (tiết kiệm RAM)"
-    }
-
-    # Lấy danh sách dịch vụ hiện tại
-    $services = Get-Service | Where-Object { 
-        $recommendations.ContainsKey($_.Name) -or $carefulServices.ContainsKey($_.Name)
-    } | Select-Object Name, DisplayName, Status, StartType
-
-    # Kết hợp thông tin dịch vụ với đề xuất
-    $results = @()
-    foreach ($svc in $services) {
-        $info = New-Object PSObject
-        $info | Add-Member -MemberType NoteProperty -Name "Name" -Value $svc.Name
-        $info | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $svc.DisplayName
-        $info | Add-Member -MemberType NoteProperty -Name "Status" -Value $svc.Status
-        $info | Add-Member -MemberType NoteProperty -Name "StartType" -Value $svc.StartType
-        
-        if ($recommendations.ContainsKey($svc.Name)) {
-            $info | Add-Member -MemberType NoteProperty -Name "Description" -Value $recommendations[$svc.Name].Description
-            $info | Add-Member -MemberType NoteProperty -Name "Recommendation" -Value $recommendations[$svc.Name].Recommendation
-            $info | Add-Member -MemberType NoteProperty -Name "Level" -Value $recommendations[$svc.Name].Level
-        } elseif ($carefulServices.ContainsKey($svc.Name)) {
-            $info | Add-Member -MemberType NoteProperty -Name "Description" -Value $carefulServices[$svc.Name]
-            $info | Add-Member -MemberType NoteProperty -Name "Recommendation" -Value "Không nên tắt"
-            $info | Add-Member -MemberType NoteProperty -Name "Level" -Value "Dangerous"
-        }
-        
-        $results += $info
-    }
+function Remove-FileWithErrorHandling {
+    param([string]$FilePath)
     
-    return $results
+    try {
+        Remove-Item -Path $FilePath -Force -ErrorAction Stop
+        Write-Log "✅ Đã xóa thành công: $FilePath"
+        return $true
+    } 
+    catch [System.UnauthorizedAccessException] {
+        Write-Log "❌ Quyền truy cập bị từ chối: $FilePath"
+    } 
+    catch [System.IO.IOException] {
+        Write-Log "❌ File đang được sử dụng: $FilePath"
+    } 
+    catch {
+        Write-Log "❌ Lỗi khi xóa file $FilePath: $($_.Exception.Message)"
+    }
+    return $false
+}
+
+# Hàm phân tích dịch vụ Windows và đưa ra gợi ý
+$script:CriticalServices = @(
+    "wuauserv",      # Windows Update - Cần thiết cho cập nhật bảo mật
+    "WinDefend",     # Windows Defender - Bảo vệ hệ thống khỏi phần mềm độc hại
+    "Dhcp",          # DHCP Client - Cần thiết cho kết nối mạng
+    "Dnscache",      # DNS Client - Cần cho phân giải tên miền
+    "nsi",           # Network Store Interface Service - Yêu cầu cho kết nối mạng
+    "LanmanWorkstation", # Workstation - Cần thiết để truy cập mạng
+    "wscsvc",        # Security Center - Theo dõi bảo mật
+    "netprofm",      # Network List Service - Quản lý kết nối mạng
+    "DcomLaunch",    # DCOM Server Process Launcher - Khởi chạy các ứng dụng COM
+    "RpcSs",         # Remote Procedure Call - Giao tiếp giữa các quy trình
+    "LSM",           # Local Session Manager - Quản lý phiên đăng nhập
+    "CoreMessagingRegistrar", # CoreMessaging - Giao tiếp ứng dụng nội bộ
+    "SystemEventsBroker" # System Events Broker - Quản lý sự kiện hệ thống
+)
+
+$script:SafeToDisableServices = @{
+    "DiagTrack" = @{
+        Description = "Connected User Experiences and Telemetry - Thu thập dữ liệu sử dụng"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "dmwappushservice" = @{
+        Description = "Device Management Wireless Application Protocol - Chỉ cần cho WAP Push Message Routing Service"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "HomeGroupListener" = @{
+        Description = "HomeGroup Listener - Không cần nếu không dùng HomeGroup"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "HomeGroupProvider" = @{
+        Description = "HomeGroup Provider - Không cần nếu không dùng HomeGroup"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "SysMain" = @{
+        Description = "SysMain/Superfetch - Trên SSD không cần thiết"
+        DefaultRecommendation = "Tùy thuộc vào loại ổ đĩa"
+        Level = "Safe"
+    }
+    "WSearch" = @{
+        Description = "Windows Search - Có thể tắt nếu không thường xuyên tìm kiếm"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "XblAuthManager" = @{
+        Description = "Xbox Live Auth Manager - Chỉ cần nếu dùng Xbox app"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "XblGameSave" = @{
+        Description = "Xbox Live Game Save - Chỉ cần nếu lưu game Xbox"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "XboxNetApiSvc" = @{
+        Description = "Xbox Live Networking - Chỉ cần nếu chơi game Xbox"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "lfsvc" = @{
+        Description = "Geolocation Service - Dịch vụ định vị"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "MapsBroker" = @{
+        Description = "Downloaded Maps Manager - Chỉ cần nếu dùng Maps offline"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "PcaSvc" = @{
+        Description = "Program Compatibility Assistant - Có thể tắt sau khi cài đặt các phần mềm"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "RemoteRegistry" = @{
+        Description = "Remote Registry - Chỉ cần khi quản trị từ xa"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "RetailDemo" = @{
+        Description = "Retail Demo Service - Chỉ dùng cho máy trưng bày"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "TrkWks" = @{
+        Description = "Distributed Link Tracking Client - Theo dõi liên kết file trên mạng"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "WbioSrvc" = @{
+        Description = "Windows Biometric Service - Chỉ cần nếu dùng nhận dạng sinh trắc học"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "wisvc" = @{
+        Description = "Windows Insider Service - Chỉ cần cho Windows Insider"
+        DefaultRecommendation = "Có thể tắt" 
+        Level = "Safe"
+    }
+    "WMPNetworkSvc" = @{
+        Description = "Windows Media Player Network Sharing - Chia sẻ thư viện media"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+}
+$script:CriticalServices = @(
+    "wuauserv",      # Windows Update - Cần thiết cho cập nhật bảo mật
+    "WinDefend",     # Windows Defender - Bảo vệ hệ thống khỏi phần mềm độc hại
+    "Dhcp",          # DHCP Client - Cần thiết cho kết nối mạng
+    "Dnscache",      # DNS Client - Cần cho phân giải tên miền
+    "nsi",           # Network Store Interface Service - Yêu cầu cho kết nối mạng
+    "LanmanWorkstation", # Workstation - Cần thiết để truy cập mạng
+    "wscsvc",        # Security Center - Theo dõi bảo mật
+    "netprofm",      # Network List Service - Quản lý kết nối mạng
+    "DcomLaunch",    # DCOM Server Process Launcher - Khởi chạy các ứng dụng COM
+    "RpcSs",         # Remote Procedure Call - Giao tiếp giữa các quy trình
+    "LSM",           # Local Session Manager - Quản lý phiên đăng nhập
+    "CoreMessagingRegistrar", # CoreMessaging - Giao tiếp ứng dụng nội bộ
+    "SystemEventsBroker" # System Events Broker - Quản lý sự kiện hệ thống
+)
+$script:CarefulServices = @{
+    "Spooler" = @{
+        Description = "Print Spooler - Cần thiết cho in ấn"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "LanmanServer" = @{
+        Description = "Server - Cần thiết cho chia sẻ file và máy in"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "BITS" = @{
+        Description = "Background Intelligent Transfer Service - Cần cho Windows Update"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "wuauserv" = @{
+        Description = "Windows Update - Cần cho cập nhật hệ thống"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "EventLog" = @{
+        Description = "Windows Event Log - Ghi nhật ký hệ thống quan trọng"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "AppXSvc" = @{
+        Description = "AppX Deployment Service - Cần cho ứng dụng Microsoft Store"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+}
+
+function Get-ServiceInfo {
+    param(
+        [string]$ServiceName
+    )
+    
+    try {
+        $service = Get-Service -Name $ServiceName -ErrorAction Stop
+        return [PSCustomObject]@{
+            Name = $service.Name
+            DisplayName = $service.DisplayName
+            Status = $service.Status
+            StartType = $service.StartType
+        }
+    }
+    catch {
+        Write-Log "Không thể lấy thông tin dịch vụ $ServiceName: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Test-IsSSD {
+    try {
+        # Phương pháp 1: Kiểm tra tên model có chứa "SSD"
+        $diskDrive = Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction Stop | 
+                    Where-Object { $_.Model -like "*SSD*" }
+        if ($diskDrive) {
+            return $true
+        }
+        
+        # Phương pháp 2: Kiểm tra thông qua MSFT_PhysicalDisk (Windows 8+ và Server 2012+)
+        try {
+            $physicalDisks = Get-CimInstance -Namespace "root\Microsoft\Windows\Storage" -ClassName MSFT_PhysicalDisk -ErrorAction Stop
+            foreach ($disk in $physicalDisks) {
+                if ($disk.MediaType -eq 4) { # 4 = SSD
+                    return $true
+                }
+            }
+        }
+        catch {
+            # MSFT_PhysicalDisk có thể không có trên một số phiên bản Windows cũ
+            Write-Log "Không thể sử dụng MSFT_PhysicalDisk để xác định SSD: $($_.Exception.Message)"
+        }
+        
+        # Phương pháp 3: Kiểm tra thời gian truy cập ngẫu nhiên (nếu dưới 1ms, có thể là SSD)
+        $diskPerf = Get-CimInstance -ClassName Win32_DiskDrive | 
+                   Get-CimAssociatedInstance -ResultClassName Win32_PerfFormattedData_PerfDisk_PhysicalDisk -ErrorAction SilentlyContinue
+        foreach ($disk in $diskPerf) {
+            if ($disk.AvgDiskSecPerRead -lt 0.001) { # Dưới 1ms
+                return $true
+            }
+        }
+        
+        return $false
+    }
+    catch {
+        Write-Log "Lỗi khi kiểm tra loại ổ đĩa: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+# Tách dữ liệu tĩnh dịch vụ ra khỏi hàm để dễ bảo trì
+$script:CriticalServices = @(
+    "wuauserv",      # Windows Update - Cần thiết cho cập nhật bảo mật
+    "WinDefend",     # Windows Defender - Bảo vệ hệ thống khỏi phần mềm độc hại
+    "Dhcp",          # DHCP Client - Cần thiết cho kết nối mạng
+    "Dnscache",      # DNS Client - Cần cho phân giải tên miền
+    "nsi",           # Network Store Interface Service - Yêu cầu cho kết nối mạng
+    "LanmanWorkstation", # Workstation - Cần thiết để truy cập mạng
+    "wscsvc",        # Security Center - Theo dõi bảo mật
+    "netprofm",      # Network List Service - Quản lý kết nối mạng
+    "DcomLaunch",    # DCOM Server Process Launcher - Khởi chạy các ứng dụng COM
+    "RpcSs",         # Remote Procedure Call - Giao tiếp giữa các quy trình
+    "LSM",           # Local Session Manager - Quản lý phiên đăng nhập
+    "CoreMessagingRegistrar", # CoreMessaging - Giao tiếp ứng dụng nội bộ
+    "SystemEventsBroker" # System Events Broker - Quản lý sự kiện hệ thống
+)
+
+$script:SafeToDisableServices = @{
+    "DiagTrack" = @{
+        Description = "Connected User Experiences and Telemetry - Thu thập dữ liệu sử dụng"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "dmwappushservice" = @{
+        Description = "Device Management Wireless Application Protocol - Chỉ cần cho WAP Push Message Routing Service"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "HomeGroupListener" = @{
+        Description = "HomeGroup Listener - Không cần nếu không dùng HomeGroup"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "HomeGroupProvider" = @{
+        Description = "HomeGroup Provider - Không cần nếu không dùng HomeGroup"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "SysMain" = @{
+        Description = "SysMain/Superfetch - Trên SSD không cần thiết"
+        DefaultRecommendation = "Tùy thuộc vào loại ổ đĩa"
+        Level = "Safe"
+    }
+    "WSearch" = @{
+        Description = "Windows Search - Có thể tắt nếu không thường xuyên tìm kiếm"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "XblAuthManager" = @{
+        Description = "Xbox Live Auth Manager - Chỉ cần nếu dùng Xbox app"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "XblGameSave" = @{
+        Description = "Xbox Live Game Save - Chỉ cần nếu lưu game Xbox"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "XboxNetApiSvc" = @{
+        Description = "Xbox Live Networking - Chỉ cần nếu chơi game Xbox"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "lfsvc" = @{
+        Description = "Geolocation Service - Dịch vụ định vị"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "MapsBroker" = @{
+        Description = "Downloaded Maps Manager - Chỉ cần nếu dùng Maps offline"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "PcaSvc" = @{
+        Description = "Program Compatibility Assistant - Có thể tắt sau khi cài đặt các phần mềm"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "RemoteRegistry" = @{
+        Description = "Remote Registry - Chỉ cần khi quản trị từ xa"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "RetailDemo" = @{
+        Description = "Retail Demo Service - Chỉ dùng cho máy trưng bày"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "TrkWks" = @{
+        Description = "Distributed Link Tracking Client - Theo dõi liên kết file trên mạng"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "WbioSrvc" = @{
+        Description = "Windows Biometric Service - Chỉ cần nếu dùng nhận dạng sinh trắc học"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+    "wisvc" = @{
+        Description = "Windows Insider Service - Chỉ cần cho Windows Insider"
+        DefaultRecommendation = "Có thể tắt" 
+        Level = "Safe"
+    }
+    "WMPNetworkSvc" = @{
+        Description = "Windows Media Player Network Sharing - Chia sẻ thư viện media"
+        DefaultRecommendation = "Có thể tắt"
+        Level = "Safe"
+    }
+}
+
+$script:CriticalServices = @(
+    "wuauserv",      # Windows Update - Cần thiết cho cập nhật bảo mật
+    "WinDefend",     # Windows Defender - Bảo vệ hệ thống khỏi phần mềm độc hại
+    "Dhcp",          # DHCP Client - Cần thiết cho kết nối mạng
+    "Dnscache",      # DNS Client - Cần cho phân giải tên miền
+    "nsi",           # Network Store Interface Service - Yêu cầu cho kết nối mạng
+    "LanmanWorkstation", # Workstation - Cần thiết để truy cập mạng
+    "wscsvc",        # Security Center - Theo dõi bảo mật
+    "netprofm",      # Network List Service - Quản lý kết nối mạng
+    "DcomLaunch",    # DCOM Server Process Launcher - Khởi chạy các ứng dụng COM
+    "RpcSs",         # Remote Procedure Call - Giao tiếp giữa các quy trình
+    "LSM",           # Local Session Manager - Quản lý phiên đăng nhập
+    "CoreMessagingRegistrar", # CoreMessaging - Giao tiếp ứng dụng nội bộ
+    "SystemEventsBroker" # System Events Broker - Quản lý sự kiện hệ thống
+)
+$script:CarefulServices = @{
+    "Spooler" = @{
+        Description = "Print Spooler - Cần thiết cho in ấn"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "LanmanServer" = @{
+        Description = "Server - Cần thiết cho chia sẻ file và máy in"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "BITS" = @{
+        Description = "Background Intelligent Transfer Service - Cần cho Windows Update"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "wuauserv" = @{
+        Description = "Windows Update - Cần cho cập nhật hệ thống"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "EventLog" = @{
+        Description = "Windows Event Log - Ghi nhật ký hệ thống quan trọng"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+    "AppXSvc" = @{
+        Description = "AppX Deployment Service - Cần cho ứng dụng Microsoft Store"
+        Recommendation = "Không nên tắt"
+        Level = "Dangerous"
+    }
+}
+
+function Get-ServiceInfo {
+    param(
+        [string]$ServiceName
+    )
+    
+    try {
+        $service = Get-Service -Name $ServiceName -ErrorAction Stop
+        return [PSCustomObject]@{
+            Name = $service.Name
+            DisplayName = $service.DisplayName
+            Status = $service.Status
+            StartType = $service.StartType
+        }
+    }
+    catch {
+        Write-Log "Không thể lấy thông tin dịch vụ $ServiceName: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Test-IsSSD {
+    # Tạo CimSession để quản lý tài nguyên tốt hơn
+    $cimSession = $null
+    
+    try {
+        $cimSession = New-CimSession -ErrorAction Stop
+        
+        # Phương pháp 1: Kiểm tra tên model có chứa "SSD"
+        $diskDrive = Get-CimInstance -CimSession $cimSession -ClassName Win32_DiskDrive -ErrorAction Stop | 
+                    Where-Object { $_.Model -like "*SSD*" }
+        if ($diskDrive) {
+            return $true
+        }
+        
+        # Phương pháp 2: Kiểm tra thông qua MSFT_PhysicalDisk (Windows 8+ và Server 2012+)
+        try {
+            $physicalDisks = Get-CimInstance -CimSession $cimSession -Namespace "root\Microsoft\Windows\Storage" -ClassName MSFT_PhysicalDisk -ErrorAction Stop
+            foreach ($disk in $physicalDisks) {
+                if ($disk.MediaType -eq 4) { # 4 = SSD
+                    return $true
+                }
+            }
+        }
+        catch {
+            # MSFT_PhysicalDisk có thể không có trên một số phiên bản Windows cũ
+            Write-Log "Không thể sử dụng MSFT_PhysicalDisk để xác định SSD: $($_.Exception.Message)"
+        }
+        
+        # Phương pháp 3: Kiểm tra thời gian truy cập ngẫu nhiên (nếu dưới 1ms, có thể là SSD)
+        $diskPerf = Get-CimInstance -CimSession $cimSession -ClassName Win32_DiskDrive | 
+                   Get-CimAssociatedInstance -ResultClassName Win32_PerfFormattedData_PerfDisk_PhysicalDisk -ErrorAction SilentlyContinue
+        foreach ($disk in $diskPerf) {
+            if ($disk.AvgDiskSecPerRead -lt 0.001) { # Dưới 1ms
+                return $true
+            }
+        }
+        
+        return $false
+    }
+    catch {
+        Write-Log "Lỗi khi kiểm tra loại ổ đĩa: $($_.Exception.Message)"
+        return $false
+    }
+    finally {
+        # Đóng và giải phóng CimSession
+        if ($cimSession) {
+            $cimSession.Close()
+            $cimSession.Dispose()
+            Remove-Variable -Name cimSession -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Get-ServiceRecommendations {
+    # Tạo CimSession để quản lý tài nguyên tốt hơn
+    $cimSession = $null
+    
+    try {
+        Write-Log "Đang phân tích cấu hình hệ thống..."
+        $cimSession = New-CimSession -ErrorAction SilentlyContinue
+        
+        # Thu thập thông tin phần cứng để đưa ra gợi ý phù hợp
+        $ramInfo = $null
+        $totalRam = 0
+        $isSSD = $false
+        
+        try {
+            if ($cimSession) {
+                $ramInfo = Get-CimInstance -CimSession $cimSession -ClassName Win32_ComputerSystem -ErrorAction Stop
+                $totalRam = [math]::Round($ramInfo.TotalPhysicalMemory / 1GB, 0)
+                Write-Log "Đã phát hiện: $totalRam GB RAM"
+            } else {
+                $ramInfo = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+                $totalRam = [math]::Round($ramInfo.TotalPhysicalMemory / 1GB, 0)
+                Write-Log "Đã phát hiện: $totalRam GB RAM"
+            }
+            
+            $isSSD = Test-IsSSD
+            if ($isSSD) {
+                Write-Log "Đã phát hiện: SSD"
+            } else {
+                Write-Log "Đã phát hiện: HDD"
+            }
+        }
+        catch {
+            Write-Log "Cảnh báo: Không thể lấy đầy đủ thông tin phần cứng: $($_.Exception.Message)"
+        }
+
+        # Tạo bản sao của các khuyến nghị cơ bản
+        $recommendations = @{}
+        foreach ($service in $script:SafeToDisableServices.Keys) {
+            $recommendations[$service] = @{
+                Description = $script:SafeToDisableServices[$service].Description
+                Recommendation = $script:SafeToDisableServices[$service].DefaultRecommendation
+                Level = $script:SafeToDisableServices[$service].Level
+            }
+        }
+
+        # Điều chỉnh đề xuất dựa trên phần cứng
+        if ($isSSD) {
+            $recommendations["SysMain"].Recommendation = "Nên tắt (SSD đã nhanh)"
+        } else {
+            $recommendations["SysMain"].Recommendation = "Nên để nếu RAM < 8GB"
+            $recommendations["SysMain"].Level = "Careful"
+        }
+
+        # Nếu RAM ít, tắt một số dịch vụ không cần thiết
+        if ($totalRam -lt 8) {
+            $recommendations["XblAuthManager"].Recommendation = "Nên tắt (tiết kiệm RAM)"
+            $recommendations["XblGameSave"].Recommendation = "Nên tắt (tiết kiệm RAM)"
+            $recommendations["XboxNetApiSvc"].Recommendation = "Nên tắt (tiết kiệm RAM)"
+            
+            # Thêm các dịch vụ khác nên tắt khi RAM ít
+            if ($totalRam -lt 4) {
+                $recommendations["WSearch"].Recommendation = "Nên tắt (tiết kiệm RAM quan trọng)"
+                $recommendations["WSearch"].Level = "Safe"
+            }
+        }
+
+        # Lấy danh sách dịch vụ hiện tại
+        Write-Log "Đang lấy thông tin dịch vụ..."
+        $servicesList = @()
+        
+        # Lấy thông tin dịch vụ và xử lý lỗi riêng lẻ
+        foreach ($serviceName in ($recommendations.Keys + $script:CarefulServices.Keys | Sort-Object -Unique)) {
+            $serviceInfo = Get-ServiceInfo -ServiceName $serviceName
+            if ($serviceInfo) {
+                $servicesList += $serviceInfo
+            }
+        }
+
+        # Kết hợp thông tin dịch vụ với đề xuất
+        Write-Log "Đang tạo khuyến nghị cho các dịch vụ..."
+        $results = @()
+        foreach ($svc in $servicesList) {
+            $info = [PSCustomObject]@{
+                Name = $svc.Name
+                DisplayName = $svc.DisplayName
+                Status = $svc.Status
+                StartType = $svc.StartType
+                Description = ""
+                Recommendation = ""
+                Level = ""
+            }
+            
+            if ($recommendations.ContainsKey($svc.Name)) {
+                $info.Description = $recommendations[$svc.Name].Description
+                $info.Recommendation = $recommendations[$svc.Name].Recommendation
+                $info.Level = $recommendations[$svc.Name].Level
+            } 
+            elseif ($script:CarefulServices.ContainsKey($svc.Name)) {
+                $info.Description = $script:CarefulServices[$svc.Name].Description
+                $info.Recommendation = $script:CarefulServices[$svc.Name].Recommendation
+                $info.Level = $script:CarefulServices[$svc.Name].Level
+            }
+            
+            $results += $info
+        }
+        
+        Write-Log "Phân tích dịch vụ hoàn tất: Đã tìm thấy $($results.Count) dịch vụ có thể điều chỉnh"
+        return $results
+    }
+    catch {
+        Write-Log "❌ Lỗi khi phân tích dịch vụ: $($_.Exception.Message)"
+        return @()
+    }
+    finally {
+        # Đóng và giải phóng CimSession
+        if ($cimSession) {
+            $cimSession.Close()
+            $cimSession.Dispose()
+        }
+        
+        # Giải phóng tài nguyên CIM/WMI
+        $cimVariables = @('ramInfo', 'diskInfo', 'diskDrive', 'physicalDisks', 'diskPerf')
+        foreach ($var in $cimVariables) {
+            if (Get-Variable -Name $var -ErrorAction SilentlyContinue) {
+                Remove-Variable -Name $var -ErrorAction SilentlyContinue
+            }
+        }
+    
+        # Gọi hàm dọn dẹp của .NET Garbage Collector
+        [System.GC]::Collect()
+    }
 }
 
 # Hàm quản lý startup items
@@ -227,6 +733,9 @@ function Get-StartupItems {
 # Hàm sửa lỗi hệ thống
 function Start-SystemRepair {
     param (
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("SFC", "DISM_CheckHealth", "DISM_ScanHealth", "DISM_RestoreHealth", 
+                    "CheckDisk", "ResetNetworkStack", "FixWindowsUpdates", "RepairSystemFiles")]
         [string]$RepairType,
         [System.Windows.Forms.ProgressBar]$ProgressBar = $null,
         [System.Windows.Forms.Label]$StatusLabel = $null
@@ -863,24 +1372,111 @@ $disableServiceButton.Add_Click({
         $serviceName = $servicesListView.SelectedItems[0].Text
         $displayName = $servicesListView.SelectedItems[0].SubItems[1].Text
         
-        $result = [System.Windows.Forms.MessageBox]::Show(
-            "Bạn có chắc chắn muốn vô hiệu hóa dịch vụ '$displayName'?`nCó thể ảnh hưởng đến hoạt động của hệ thống nếu đây là dịch vụ quan trọng.",
-            "Xác nhận vô hiệu hóa dịch vụ",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
-        
-        if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            try {
-                Stop-Service -Name $serviceName -Force -ErrorAction Stop
-                Set-Service -Name $serviceName -StartupType Disabled -ErrorAction Stop
-                Write-Log "✅ Đã vô hiệu hóa dịch vụ '$displayName'"
-                
-                # Cập nhật ListView
-                $loadServicesButton.PerformClick()
-            } catch {
-                Write-Log "❌ Không thể vô hiệu hóa dịch vụ '$displayName': $($_.Exception.Message)"
+        # Kiểm tra xem có phải là dịch vụ cực kỳ quan trọng không
+        if ($script:CriticalServices -contains $serviceName) {
+            $warningResult = [System.Windows.Forms.MessageBox]::Show(
+                "CẢNH BÁO NGHIÊM TRỌNG!`n`n" + 
+                "Dịch vụ '$displayName' là dịch vụ CỐT LÕI của Windows. Vô hiệu hóa nó có thể gây ra:`n" + 
+                "- Mất kết nối mạng`n" + 
+                "- Lỗi khởi động Windows`n" + 
+                "- Các vấn đề bảo mật nghiêm trọng`n`n" + 
+                "Bạn có THỰC SỰ muốn vô hiệu hóa dịch vụ này không?`n" +
+                "(Không đề xuất cho hầu hết người dùng)",
+                "CẢNH BÁO - Dịch vụ Cốt lõi",
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+            
+            if ($warningResult -ne [System.Windows.Forms.DialogResult]::Yes) {
+                return
             }
+            
+            # Yêu cầu xác nhận thứ hai
+            $confirmResult = [System.Windows.Forms.MessageBox]::Show(
+                "Đây là xác nhận cuối cùng!`n`n" +
+                "Gõ 'ĐỒNG Ý' (viết hoa) vào hộp thoại tiếp theo để xác nhận rằng bạn hiểu rủi ro và vẫn muốn tiếp tục.",
+                "Xác nhận Cuối cùng",
+                [System.Windows.Forms.MessageBoxButtons]::OKCancel,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
+            
+            if ($confirmResult -ne [System.Windows.Forms.DialogResult]::OK) {
+                return
+            }
+            
+            # Yêu cầu nhập "ĐỒNG Ý" để xác nhận
+            $verificationForm = New-Object System.Windows.Forms.Form
+            $verificationForm.Text = "Xác minh Thao tác"
+            $verificationForm.Size = New-Object System.Drawing.Size(400, 150)
+            $verificationForm.StartPosition = "CenterScreen"
+            $verificationForm.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
+            
+            $verificationLabel = New-Object System.Windows.Forms.Label
+            $verificationLabel.Location = New-Object System.Drawing.Point(10, 20)
+            $verificationLabel.Size = New-Object System.Drawing.Size(380, 20)
+            $verificationLabel.Text = "Nhập 'ĐỒNG Ý' để xác nhận vô hiệu hóa dịch vụ quan trọng:"
+            $verificationForm.Controls.Add($verificationLabel)
+            
+            $verificationTextBox = New-Object System.Windows.Forms.TextBox
+            $verificationTextBox.Location = New-Object System.Drawing.Point(10, 50)
+            $verificationTextBox.Size = New-Object System.Drawing.Size(280, 20)
+            $verificationForm.Controls.Add($verificationTextBox)
+            
+            $verificationButton = New-Object System.Windows.Forms.Button
+            $verificationButton.Location = New-Object System.Drawing.Point(300, 49)
+            $verificationButton.Size = New-Object System.Drawing.Size(75, 23)
+            $verificationButton.Text = "Xác nhận"
+            $verificationButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+            $verificationForm.AcceptButton = $verificationButton
+            $verificationForm.Controls.Add($verificationButton)
+            
+            $verificationResult = $verificationForm.ShowDialog()
+            
+            if ($verificationResult -ne [System.Windows.Forms.DialogResult]::OK -or $verificationTextBox.Text -ne "ĐỒNG Ý") {
+                Write-Log "❌ Đã hủy việc vô hiệu hóa dịch vụ cốt lõi '$displayName'"
+                return
+            }
+        }
+        # Dịch vụ được đánh dấu là "cần thận trọng"
+        elseif ($script:CarefulServices.ContainsKey($serviceName)) {
+            $result = [System.Windows.Forms.MessageBox]::Show(
+                "Dịch vụ '$displayName' được đánh dấu là QUAN TRỌNG.`n`n" +
+                "Vô hiệu hóa dịch vụ này có thể ảnh hưởng đến các tính năng sau:`n" +
+                "- " + $script:CarefulServices[$serviceName].Description + "`n`n" +
+                "Bạn có chắc chắn muốn vô hiệu hóa nó không?",
+                "Xác nhận vô hiệu hóa dịch vụ quan trọng",
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
+            
+            if ($result -ne [System.Windows.Forms.DialogResult]::Yes) {
+                return
+            }
+        }
+        # Dịch vụ thông thường - xác nhận đơn giản
+        else {
+            $result = [System.Windows.Forms.MessageBox]::Show(
+                "Bạn có chắc chắn muốn vô hiệu hóa dịch vụ '$displayName'?",
+                "Xác nhận vô hiệu hóa dịch vụ",
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Question
+            )
+            
+            if ($result -ne [System.Windows.Forms.DialogResult]::Yes) {
+                return
+            }
+        }
+        
+        # Thực hiện vô hiệu hóa sau khi đã xác nhận
+        try {
+            Stop-Service -Name $serviceName -Force -ErrorAction Stop
+            Set-Service -Name $serviceName -StartupType Disabled -ErrorAction Stop
+            Write-Log "✅ Đã vô hiệu hóa dịch vụ '$displayName'"
+            
+            # Cập nhật ListView
+            $loadServicesButton.PerformClick()
+        } catch {
+            Write-Log "❌ Không thể vô hiệu hóa dịch vụ '$displayName': $($_.Exception.Message)"
         }
     } else {
         [System.Windows.Forms.MessageBox]::Show(

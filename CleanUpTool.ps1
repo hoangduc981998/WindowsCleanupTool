@@ -94,7 +94,7 @@ function Remove-FileWithErrorHandling {
         Write-Log "❌ File đang được sử dụng: $FilePath"
     } 
     catch {
-        Write-Log "❌ Lỗi khi xóa file $FilePath: $($_.Exception.Message)"
+        Write-Log "❌ Lỗi khi xóa file ${FilePath}: $($_.Exception.Message)"
     }
     return $false
 }
@@ -271,7 +271,7 @@ function Get-ServiceInfo {
         }
     }
     catch {
-        Write-Log "Không thể lấy thông tin dịch vụ $ServiceName: $($_.Exception.Message)"
+        Write-Log "Không thể lấy thông tin dịch vụ ${ServiceName}: $($_.Exception.Message)"
         return $null
     }
 }
@@ -489,7 +489,7 @@ function Get-ServiceInfo {
         }
     }
     catch {
-        Write-Log "Không thể lấy thông tin dịch vụ $ServiceName: $($_.Exception.Message)"
+        Write-Log "Không thể lấy thông tin dịch vụ ${ServiceName}: $($_.Exception.Message)"
         return $null
     }
 }
@@ -629,28 +629,31 @@ function Get-ServiceRecommendations {
         Write-Log "Đang tạo khuyến nghị cho các dịch vụ..."
         $results = @()
         foreach ($svc in $servicesList) {
-            $info = [PSCustomObject]@{
-                Name = $svc.Name
-                DisplayName = $svc.DisplayName
-                Status = $svc.Status
-                StartType = $svc.StartType
-                Description = ""
-                Recommendation = ""
-                Level = ""
-            }
-            
-            if ($recommendations.ContainsKey($svc.Name)) {
-                $info.Description = $recommendations[$svc.Name].Description
-                $info.Recommendation = $recommendations[$svc.Name].Recommendation
-                $info.Level = $recommendations[$svc.Name].Level
-            } 
-            elseif ($script:CarefulServices.ContainsKey($svc.Name)) {
-                $info.Description = $script:CarefulServices[$svc.Name].Description
-                $info.Recommendation = $script:CarefulServices[$svc.Name].Recommendation
-                $info.Level = $script:CarefulServices[$svc.Name].Level
-            }
-            
-            $results += $info
+            if ($svc -ne $null -and $svc.Name -ne $null) { 
+                $info = [PSCustomObject]@{
+                    Name = $svc.Name
+                    DisplayName = $svc.DisplayName
+                    Status = $svc.Status
+                    StartType = $svc.StartType
+                    Description = ""
+                    Recommendation = ""
+                    Level = ""
+                }
+                if ($recommendations.ContainsKey($svc.Name)) {
+                    $info.Description = $recommendations[$svc.Name].Description
+                    $info.Recommendation = $recommendations[$svc.Name].Recommendation
+                    $info.Level = $recommendations[$svc.Name].Level
+                } 
+                elseif ($script:CarefulServices.ContainsKey($svc.Name)) {
+                    $info.Description = $script:CarefulServices[$svc.Name].Description
+                    $info.Recommendation = $script:CarefulServices[$svc.Name].Recommendation
+                    $info.Level = $script:CarefulServices[$svc.Name].Level
+                }
+                
+                $results += $info
+            } else {
+                Write-Log "Cảnh báo: Bỏ qua một dịch vụ không hợp lệ hoặc không có tên trong quá trình tạo khuyến nghị."
+           }
         }
         
         Write-Log "Phân tích dịch vụ hoàn tất: Đã tìm thấy $($results.Count) dịch vụ có thể điều chỉnh"
@@ -1016,7 +1019,7 @@ function Start-SystemRepair {
 # 4.1 Form chính 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Công cụ dọn dẹp hàng Nỏ :))"
-$form.Size = New-Object System.Drawing.Size(800, 970)
+$form.Size = New-Object System.Drawing.Size(805, 765)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
@@ -1042,6 +1045,7 @@ $headerLabel.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawi
 $headerPanel.Controls.Add($headerLabel)
 
 # 4.3 TabControl
+
 $tabControl = New-Object System.Windows.Forms.TabControl
 $tabControl.Location = New-Object System.Drawing.Point(10, 70)
 $tabControl.Size = New-Object System.Drawing.Size(770, 400)
@@ -1071,8 +1075,200 @@ $tabSystemRepair.Text = "Sửa lỗi hệ thống"
 $tabUtilities = New-Object System.Windows.Forms.TabPage
 $tabUtilities.Text = "Tiện ích"
 
-$tabControl.Controls.AddRange(@($tabBasic, $tabAdvanced, $tabOptimize, $tabSecurity, $tabPrivacy, $tabServices, $tabSystemRepair, $tabUtilities))
+$tabControl.Controls.AddRange(@($tabBasic, $tabAdvanced, $tabOptimize, $tabSecurity, $tabPrivacy, $tabUtilities, $tabServices, $tabSystemRepair))
 
+# 1. Sửa hoàn toàn phần hiển thị ListView dịch vụ
+# Thêm hàm mới này vào script của bạn
+function Update-ServicesListView {
+    param(
+        [System.Windows.Forms.ListView]$ListView
+    )
+
+    if ($ListView -eq $null) {
+        Write-Log "Lỗi: ListView không được khởi tạo"
+        return
+    }
+
+    # Xóa dữ liệu cũ
+    $ListView.Items.Clear()
+    
+    Write-Log "Đang phân tích thông tin dịch vụ..."
+    
+    try {
+        # Lấy danh sách dịch vụ
+        $services = Get-ServiceRecommendations
+        
+        if ($services -eq $null -or $services.Count -eq 0) {
+            Write-Log "Không tìm thấy thông tin dịch vụ nào để hiển thị."
+            return
+        }
+        
+        # Thêm từng dịch vụ vào ListView với kiểm tra lỗi
+        foreach ($service in $services) {
+            try {
+                # Kiểm tra service có hợp lệ không
+                if ($service -eq $null) { continue }
+                
+                # Tạo item mới với giá trị đầu tiên
+                $name = if ([string]::IsNullOrEmpty($service.Name)) { "Unknown" } else { $service.Name }
+                $listItem = New-Object System.Windows.Forms.ListViewItem($name)
+                
+                # Tạo và thêm các subitem với kiểm tra giá trị
+                $displayNameSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $displayNameSubItem.Text = if ([string]::IsNullOrEmpty($service.DisplayName)) { "N/A" } else { $service.DisplayName }
+                [void]$listItem.SubItems.Add($displayNameSubItem)
+                
+                $statusSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $statusSubItem.Text = if ($service.Status -eq $null) { "Unknown" } else { $service.Status.ToString() }
+                [void]$listItem.SubItems.Add($statusSubItem)
+                
+                $startTypeSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $startTypeSubItem.Text = if ($service.StartType -eq $null) { "Unknown" } else { $service.StartType.ToString() }
+                [void]$listItem.SubItems.Add($startTypeSubItem)
+                
+                $descriptionSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $descriptionSubItem.Text = if ([string]::IsNullOrEmpty($service.Description)) { "" } else { $service.Description }
+                [void]$listItem.SubItems.Add($descriptionSubItem)
+                
+                $recommendationSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $recommendationSubItem.Text = if ([string]::IsNullOrEmpty($service.Recommendation)) { "" } else { $service.Recommendation }
+                [void]$listItem.SubItems.Add($recommendationSubItem)
+                
+                # Thêm item vào ListView
+                [void]$ListView.Items.Add($listItem)
+            }
+            catch {
+                Write-Log "Lỗi khi xử lý dịch vụ: $($_.Exception.Message)"
+            }
+        }
+        
+        Write-Log "Đã hoàn tất phân tích dịch vụ."
+    }
+    catch {
+        Write-Log "Lỗi phân tích dịch vụ: $($_.Exception.Message)"
+    }
+}
+
+# 2. Triển khai tính năng thay đổi kích thước TabControl
+# Biến toàn cục cho tính năng điều chỉnh kích thước TabControl
+$script:defaultTabControlSize = New-Object System.Drawing.Size(770, 390)
+$script:expandedTabControlSize = New-Object System.Drawing.Size(770, 535)
+$script:isTabExpanded = $false
+$script:controlsToHide = @()
+
+# Hàm khởi tạo tính năng thay đổi kích thước
+function Initialize-DynamicTabControl {
+    param(
+        [System.Windows.Forms.TabControl]$TabControl,
+        [System.Windows.Forms.Form]$ParentForm,
+        [int[]]$ExpandedTabIndexes
+    )
+    
+    if ($TabControl -eq $null -or $ParentForm -eq $null) {
+        Write-Log "Lỗi: TabControl hoặc Form không hợp lệ để khởi tạo thay đổi kích thước"
+        return
+    }
+    
+    # Lưu thông tin các control cần ẩn/hiện
+    foreach ($control in $ParentForm.Controls) {
+        if ($control -ne $TabControl -and $control.Location.Y -gt $TabControl.Location.Y + $script:defaultTabControlSize.Height) {
+            $script:controlsToHide += @{
+                Control = $control
+                OriginalLocation = $control.Location
+                OriginalVisible = $control.Visible
+            }
+        }
+    }
+    
+    # Thêm sự kiện xử lý thay đổi tab
+    $TabControl.add_SelectedIndexChanged({
+        Write-Log "Tab được chọn: $($TabControl.SelectedIndex)" # Log để debug
+        
+        if ($ExpandedTabIndexes -contains $TabControl.SelectedIndex) {
+            # Mở rộng khi chọn tab đặc biệt
+            Write-Log "Mở rộng TabControl cho tab $($TabControl.SelectedIndex)"
+            if (-not $script:isTabExpanded) {
+                $script:isTabExpanded = $true
+                
+                # Ẩn các control phía dưới
+                foreach ($controlInfo in $script:controlsToHide) {
+                    $controlInfo.Control.Visible = $false
+                }
+                
+                # Mở rộng TabControl
+                $TabControl.Size = $script:expandedTabControlSize
+                $TabControl.Refresh()
+            }
+        } 
+        else {
+            # Thu nhỏ khi chọn các tab khác
+            if ($script:isTabExpanded) {
+                Write-Log "Thu nhỏ TabControl cho tab $($TabControl.SelectedIndex)"
+                $script:isTabExpanded = $false
+                
+                # Thu nhỏ TabControl
+                $TabControl.Size = $script:defaultTabControlSize
+                $TabControl.Refresh()
+                
+                # Hiện lại các control phía dưới
+                foreach ($controlInfo in $script:controlsToHide) {
+                    $controlInfo.Control.Visible = $controlInfo.OriginalVisible
+                }
+            }
+        }
+    })
+    
+    Write-Log "Đã khởi tạo tính năng thay đổi kích thước TabControl"
+}
+
+# Thay thế toàn bộ tính năng bằng cách tiếp cận đơn giản hơn
+function Setup-TabSizeChange {
+    # Lưu kích thước và vị trí ban đầu
+    $script:normalTabSize = $tabControl.Size
+    $script:normalTabBottom = $tabControl.Bottom
+    
+    # Xác định các control nằm dưới TabControl
+    $script:controlsBelowTab = @()
+    foreach ($ctrl in $form.Controls) {
+        if ($ctrl -ne $tabControl -and $ctrl.Top -gt $script:normalTabBottom) {
+            $script:controlsBelowTab += @{
+                Control = $ctrl
+                OriginalTop = $ctrl.Top
+                OriginalVisible = $ctrl.Visible
+            }
+        }
+    }
+    
+    # Thêm sự kiện
+    $tabControl.add_SelectedIndexChanged({
+        # Xác định tab nào cần mở rộng (tab 6 và 7)
+        $expandTabs = @(6, 7)
+        
+        if ($expandTabs -contains $tabControl.SelectedIndex) {
+            # Mở rộng TabControl
+            $tabControl.Height = 535 # Kích thước mở rộng
+            
+            # Ẩn các control bên dưới
+            foreach ($ctrlInfo in $script:controlsBelowTab) {
+                $ctrlInfo.Control.Visible = $false
+            }
+        } else {
+            # Trả về kích thước thông thường
+            $tabControl.Size = $script:normalTabSize
+            
+            # Hiện lại các control
+            foreach ($ctrlInfo in $script:controlsBelowTab) {
+                $ctrlInfo.Control.Visible = $ctrlInfo.OriginalVisible
+            }
+        }
+        
+        # Đảm bảo form được vẽ lại
+        $form.Refresh()
+    })
+}
+
+# Gọi hàm này sau khi khởi tạo form và các control
+Setup-TabSizeChange
 # 4.4 ToolTip
 $tooltip = New-Object System.Windows.Forms.ToolTip
 $tooltip.AutoPopDelay = 5000
@@ -1339,27 +1535,104 @@ $tabServices.Controls.Add($servicesLabel)
 # Nút Load dịch vụ
 $loadServicesButton = Create-RoundedButton "Phân tích dịch vụ" 610 20 130 25
 $loadServicesButton.Add_Click({
-    $servicesListView.Items.Clear()
-    $services = Get-ServiceRecommendations
+    try {
+		Add-Type -AssemblyName System.Windows.Forms
+        Write-Log "Button Click: Đang phân tích dịch vụ hệ thống..."
+        $servicesListView.Items.Clear()
+        
+        # Bước 1: Thu thập TẤT CẢ output từ hàm vào một mảng một cách tường minh
+        $rawReturnedItems = @(Get-ServiceRecommendations) 
 
-    foreach ($service in $services) {
-        $item = New-Object System.Windows.Forms.ListViewItem($service.Name)
-        $item.SubItems.Add($service.DisplayName)
-        $item.SubItems.Add($service.Status.ToString())
-        $item.SubItems.Add($service.StartType.ToString())
-        $item.SubItems.Add($service.Description)
-        $item.SubItems.Add($service.Recommendation)
-        
-        # Màu sắc dựa trên mức độ
-        if ($service.Level -eq "Safe") {
-            $item.BackColor = [System.Drawing.Color]::FromArgb(230, 255, 230) # Xanh nhạt
-        } elseif ($service.Level -eq "Careful") {
-            $item.BackColor = [System.Drawing.Color]::FromArgb(255, 255, 220) # Vàng nhạt
-        } elseif ($service.Level -eq "Dangerous") {
-            $item.BackColor = [System.Drawing.Color]::FromArgb(255, 230, 230) # Đỏ nhạt
+        $servicesToDisplay = @() # Khởi tạo mảng rỗng để chứa các dịch vụ hợp lệ
+
+        Write-Log "DEBUG: \$rawReturnedItems - Là Mảng (IsArray): $($rawReturnedItems -is [System.Array]), Số lượng (Count): $($rawReturnedItems.Count)"
+
+        if ($rawReturnedItems.Count -eq 0) {
+            Write-Log "DEBUG: Get-ServiceRecommendations không trả về hoặc không output bất cứ thứ gì (mảng rỗng sau khi thu thập)."
+        } else {
+            # Lọc trực tiếp $rawReturnedItems để tìm các PSCustomObject dịch vụ hợp lệ
+            # Điều này sẽ bỏ qua bất kỳ mục "rác" nào có thể đã được output ra pipeline
+            Write-Log "DEBUG: Đang lọc \$rawReturnedItems trực tiếp để tìm các PSCustomObject dịch vụ hợp lệ."
+            $servicesToDisplay = $rawReturnedItems | Where-Object {
+                $_ -ne $null -and 
+                $_ -is [PSCustomObject] -and 
+                $_.PSObject.Properties["Name"] -ne $null -and # Đảm bảo có thuộc tính Name
+                $_.PSObject.Properties["DisplayName"] -ne $null # Đảm bảo có thuộc tính DisplayName
+            }
+            
+            Write-Log "DEBUG: Sau khi lọc, có $($servicesToDisplay.Count) dịch vụ hợp lệ được tìm thấy trong \$rawReturnedItems."
+
+            # Nếu số lượng dịch vụ hợp lệ ít hơn số lượng mục thô, ghi log các mục không hợp lệ
+            if ($servicesToDisplay.Count -lt $rawReturnedItems.Count) {
+                $otherItemsCount = $rawReturnedItems.Count - $servicesToDisplay.Count
+                Write-Log "DEBUG: Phát hiện $($otherItemsCount) mục không phải là dịch vụ hợp lệ trong output của Get-ServiceRecommendations."
+                
+                $itemsToLog = $rawReturnedItems | Where-Object {
+                    $_ -eq $null -or
+                    $_ -isnot [PSCustomObject] -or
+                    $_.PSObject.Properties["Name"] -eq $null -or
+                    $_.PSObject.Properties["DisplayName"] -eq $null
+                } | Select-Object -First 5 # Chỉ log 5 mục đầu tiên để tránh quá nhiều log
+
+                $itemsToLog | ForEach-Object -Begin { $i = 1 } -Process {
+                    $itemValue = if ($_ -eq $null) { "\$null" } else { $_.ToString() }
+                    $itemType = if ($_ -eq $null) { "NullType" } else { $_.GetType().FullName }
+                    Write-Log "DEBUG ITEM BẤT THƯỜNG #$($i++): '$($itemValue)' (Kiểu: $($itemType))"
+                }
+            }
         }
-        
-        $servicesListView.Items.Add($item)
+
+        # Bước 2: Kiểm tra số lượng dịch vụ hợp lệ sau khi lọc
+        if ($servicesToDisplay.Count -eq 0) {
+            Write-Log "Button Click: Không có dịch vụ hợp lệ nào để hiển thị sau khi kiểm tra và lọc."
+            return
+        }
+
+        # Bước 3: Điền dữ liệu vào ListView (giữ nguyên phần này từ các phiên bản trước)
+        Write-Log "Button Click: Bắt đầu điền ListView với $($servicesToDisplay.Count) dịch vụ hợp lệ."
+        foreach ($service in $servicesToDisplay) {
+            try {
+                $name = $service.Name 
+                $listItem = New-Object System.Windows.Forms.ListViewItem($name)
+                
+                $displayNameSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $displayNameSubItem.Text = if ([string]::IsNullOrEmpty($service.DisplayName)) { "N/A" } else { $service.DisplayName }
+                [void]$listItem.SubItems.Add($displayNameSubItem)
+                
+                $statusSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $statusSubItem.Text = if ($service.Status -eq $null) { "Unknown" } else { $service.Status.ToString() }
+                [void]$listItem.SubItems.Add($statusSubItem)
+                
+                $startTypeSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $startTypeSubItem.Text = if ($service.StartType -eq $null) { "Unknown" } else { $service.StartType.ToString() }
+                [void]$listItem.SubItems.Add($startTypeSubItem)
+                
+                $descriptionSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $descriptionSubItem.Text = if ([string]::IsNullOrEmpty($service.Description)) { "" } else { $service.Description }
+                [void]$listItem.SubItems.Add($descriptionSubItem)
+                
+                $recommendationSubItem = New-Object System.Windows.Forms.ListViewItem.ListViewSubItem
+                $recommendationSubItem.Text = if ([string]::IsNullOrEmpty($service.Recommendation)) { "" } else { $service.Recommendation }
+                [void]$listItem.SubItems.Add($recommendationSubItem)
+                
+                if ($service.Level -eq "Safe") {
+                    $listItem.BackColor = [System.Drawing.Color]::FromArgb(230, 255, 230)
+                } elseif ($service.Level -eq "Careful") {
+                    $listItem.BackColor = [System.Drawing.Color]::FromArgb(255, 255, 220)
+                } elseif ($service.Level -eq "Dangerous") {
+                    $listItem.BackColor = [System.Drawing.Color]::FromArgb(255, 230, 230)
+                }
+                
+                [void]$servicesListView.Items.Add($listItem)
+            }
+            catch {
+                Write-Log "Lỗi khi xử lý dịch vụ '$($service.Name)' để thêm vào ListView: $($_.Exception.Message)"
+            }
+        }
+        Write-Log "Đã hoàn tất điền dữ liệu dịch vụ vào ListView."
+    }
+    catch {
+        Write-Log "Lỗi nghiêm trọng trong sự kiện Click của nút Load Services: $($_.Exception.Message)"
     }
 })
 $tabServices.Controls.Add($loadServicesButton)
@@ -1521,7 +1794,7 @@ $tabServices.Controls.Add($enableServiceButton)
 # ListView cho các ứng dụng khởi động
 $startupLabel = New-Object System.Windows.Forms.Label
 $startupLabel.Location = New-Object System.Drawing.Point(10, 280)
-$startupLabel.Size = New-Object System.Drawing.Size(740, 25)
+$startupLabel.Size = New-Object System.Drawing.Size(540, 25)
 $startupLabel.Text = "Ứng dụng khởi động cùng Windows:"
 $startupLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $tabServices.Controls.Add($startupLabel)
@@ -1783,7 +2056,7 @@ $systemInfoPanel.Controls.Add($diskInfoLabel)
 
 # 4.8 Panel điều khiển (progress bar, log, nút bắt đầu/hủy)
 $controlPanel = New-Object System.Windows.Forms.Panel
-$controlPanel.Location = New-Object System.Drawing.Point(10, 595) # ĐÃ ĐIỀU CHỈNH Y
+$controlPanel.Location = New-Object System.Drawing.Point(10, 695) # ĐÃ ĐIỀU CHỈNH Y
 $controlPanel.Size = New-Object System.Drawing.Size(775, 160)
 
 # --- Panel điều khiển cải tiến ---
@@ -1975,7 +2248,6 @@ function Start-Cleanup {
                 $subProgressBar.Value = 0
             })
 			
-        try {
             switch ($key) {
                 # --- Dọn dẹp cơ bản ---
                 "TempFiles" {
@@ -2598,7 +2870,8 @@ function Start-Cleanup {
         if ($success -eq "Skip") { $skippedTasks += $taskText }
         elseif ($success -eq $false) { $failedTasks += $taskText }
 		else { $successTasks += $taskText }
-    }
+		}
+		
 
     # Ẩn progress bar phụ khi hoàn tất
     $form.Invoke([Action]{

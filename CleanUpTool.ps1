@@ -278,31 +278,18 @@ $CoreLogic = {
                 # --- CAC TAC VU NANG (Dung Run-Safe de chong treo) ---
                 "WinSxS"{ 
                     try {
-                        $proc = Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" -Wait -PassThru -NoNewWindow -ErrorAction Stop
-                        if ($proc.ExitCode -eq 0) {
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã dọn WinSxS`n")
-                            Write-CleanupLog "Đã dọn WinSxS"
-                        } else {
-                            throw "Exit code: $($proc.ExitCode)"
-                        }
+                        Run-Safe "dism.exe" "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" 600
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã dọn WinSxS`n")
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi WinSxS: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi WinSxS: $($_.Exception.Message)"
                     }
                 }
                 "StoreCache"{ 
                     try {
-                        $wsreset = "$env:windir\System32\WSReset.exe"
-                        if (Test-Path $wsreset) {
-                            Start-Process $wsreset -Wait -NoNewWindow -ErrorAction Stop
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã reset Store Cache`n")
-                            Write-CleanupLog "Đã reset Microsoft Store"
-                        } else {
-                            throw "WSReset.exe không tìm thấy"
-                        }
+                        Run-Safe "wsreset" ""
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã reset Store Cache`n")
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Store Cache: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi Store Cache: $($_.Exception.Message)"
                     }
                 }
                 "Hibernation"{ 
@@ -315,16 +302,10 @@ $CoreLogic = {
                 }
                 "CompressNTFS"{ 
                     try {
-                        $proc = Start-Process "compact.exe" -ArgumentList "/CompactOS:always" -Wait -PassThru -NoNewWindow -ErrorAction Stop
-                        if ($proc.ExitCode -eq 0) {
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã nén NTFS`n")
-                            Write-CleanupLog "Đã bật CompactOS"
-                        } else {
-                            throw "Exit code: $($proc.ExitCode). Có thể hệ thống đã được nén rồi."
-                        }
+                        Run-Safe "compact" "/CompactOS:always"
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã nén NTFS`n")
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi nén NTFS: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi CompactOS: $($_.Exception.Message)"
                     }
                 }
                 
@@ -369,31 +350,18 @@ $CoreLogic = {
                 }
                 "EnablePUAProtection"{
                     try {
-                        $defenderService = Get-Service -Name WinDefend -ErrorAction SilentlyContinue
-                        if ($defenderService -and $defenderService.Status -eq 'Running') {
-                            Set-MpPreference -PUAProtection Enabled -ErrorAction Stop
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã bật PUA Protection`n")
-                            Write-CleanupLog "Đã bật PUA Protection"
-                        } else {
-                            throw "Windows Defender chưa chạy hoặc không khả dụng"
-                        }
+                        Set-MpPreference -PUAProtection Enabled -ErrorAction Stop
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã bật PUA Protection`n")
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi PUA: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi PUA: $($_.Exception.Message)"
                     }
                 }
                 "DisableMicrophone"{
                     try {
-                        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
-                        if (-not (Test-Path $regPath)) { 
-                            New-Item -Path $regPath -Force | Out-Null 
-                        }
-                        Set-ItemProperty -Path $regPath -Name "Value" -Value "Deny" -ErrorAction Stop
+                        Disable-PnpDevice -Class 'AudioEndpoint' -Confirm:$false -ErrorAction Stop
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Microphone`n")
-                        Write-CleanupLog "Đã tắt Microphone"
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Microphone: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi Microphone: $($_.Exception.Message)"
                     }
                 }
                 "DisableAdvertisingID"{
@@ -709,7 +677,7 @@ $form.Controls.Add($infoPanel)
 
 # --- FOOTER ---
 $footerPanel = New-Object System.Windows.Forms.Panel; $footerPanel.Size = New-Object System.Drawing.Size(1000, 110); $footerPanel.Location = New-Object System.Drawing.Point(0, 610); $footerPanel.BackColor = [System.Drawing.Color]::White
-$logBox = New-Object System.Windows.Forms.RichTextBox; $logBox.Location = New-Object System.Drawing.Point(15, 10); $logBox.Size = New-Object System.Drawing.Size(700, 90); $logBox.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular); $logBox.ReadOnly = $true; $logBox.BorderStyle = "FixedSingle"; $logBox.DetectUrls = $false; $footerPanel.Controls.Add($logBox)
+$logBox = New-Object System.Windows.Forms.RichTextBox; $logBox.Location = New-Object System.Drawing.Point(15, 10); $logBox.Size = New-Object System.Drawing.Size(700, 90); $logBox.Font = New-Object System.Drawing.Font("Consolas", 10, [System.Drawing.FontStyle]::Regular); $logBox.ReadOnly = $true; $logBox.BorderStyle = "FixedSingle"; $logBox.DetectUrls = $false; $footerPanel.Controls.Add($logBox)
 $btnRun = New-Object System.Windows.Forms.Button; $btnRun.Text = "BẮT ĐẦU THỰC HIỆN"; $btnRun.Location = New-Object System.Drawing.Point(730, 10); $btnRun.Size = New-Object System.Drawing.Size(240, 50); $btnRun.BackColor = $Color_Accent; $btnRun.ForeColor = [System.Drawing.Color]::White; $btnRun.Font = $Font_Title; $btnRun.FlatStyle = "Flat"; $footerPanel.Controls.Add($btnRun)
 $prog = New-Object System.Windows.Forms.ProgressBar; $prog.Location = New-Object System.Drawing.Point(730, 70); $prog.Size = New-Object System.Drawing.Size(240, 20); $footerPanel.Controls.Add($prog)
 $form.Controls.Add($footerPanel)

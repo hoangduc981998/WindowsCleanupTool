@@ -1,15 +1,7 @@
 # WindowsCleanupTool
 # Công Cụ Dọn Dẹp Hệ Thống Windows
 
-Đây là công cụ dọn dẹp hệ thống Windows với giao diện đồ họa trực quan, giúp dọn dẹp và tối ưu hóa máy tính của bạn.
-
-## Cách cài đặt
-
-### Cách đơn giản nhất:
-1. Tải file [Install-CleanupTool.bat](https://raw.githubusercontent.com/hoangduc981998/WindowsCleanupTool/main/Install-CleanupTool.bat) (Nhấp chuột phải → Save link as)
-2. Chạy file với quyền Admin (Nhấp chuột phải → Run as administrator)
-3. Đợi quá trình cài đặt hoàn tất
-4. Khởi động công cụ từ shortcut trên Desktop
+Đây là công cụ dọn dẹp hệ thống Windows với giao diện đồ họa trực quan, giúp dọn dẹp và tối ưu hóa máy tính của bạn
 
 ## Tính năng chính
 - Dọn dẹp các file tạm

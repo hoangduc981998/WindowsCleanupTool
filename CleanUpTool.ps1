@@ -144,7 +144,7 @@ function Scan-RegistryIssues {
         } catch {}
     }
     
-    Write-CleanupLog "🔍 Quét Registry: Tìm thấy $($issues.Count) vấn đề"
+    Write-CleanupLog "[SCAN] Quét Registry: Tìm thấy $($issues.Count) vấn đề"
     return $issues
 }
 
@@ -162,12 +162,12 @@ function Clean-RegistryIssues {
         $proc2 = Start-Process reg -ArgumentList "export HKCU `"$backupHKCU`"" -Wait -PassThru -NoNewWindow -ErrorAction Stop
         
         if ($proc1.ExitCode -eq 0 -and $proc2.ExitCode -eq 0) {
-            Write-CleanupLog "✅ Đã sao lưu Registry: $backupHKLM và $backupHKCU"
+            Write-CleanupLog "[OK] Đã sao lưu Registry: $backupHKLM và $backupHKCU"
         } else {
-            Write-CleanupLog "⚠️ Sao lưu Registry có thể chưa hoàn chỉnh"
+            Write-CleanupLog "[WARN] Sao lưu Registry có thể chưa hoàn chỉnh"
         }
     } catch {
-        Write-CleanupLog "⚠️ Không thể sao lưu Registry: $($_.Exception.Message)"
+        Write-CleanupLog "[WARN] Không thể sao lưu Registry: $($_.Exception.Message)"
     }
     
     $cleaned = 0
@@ -195,9 +195,9 @@ function Clean-RegistryIssues {
                     # Skip icon issues - they don't affect system stability
                 }
             }
-            Write-CleanupLog "✅ Đã xóa: $($issue.Description)"
+            Write-CleanupLog "[OK] Đã xóa: $($issue.Description)"
         } catch {
-            Write-CleanupLog "⚠️ Không thể xóa: $($issue.Description)"
+            Write-CleanupLog "[WARN] Không thể xóa: $($issue.Description)"
         }
     }
     
@@ -211,7 +211,7 @@ function Find-DuplicateFiles {
         [int]$MinSizeMB = 1
     )
     
-    Write-CleanupLog "🔍 Đang quét file trùng lặp trong: $ScanPath"
+    Write-CleanupLog "[SCAN] Đang quét file trùng lặp trong: $ScanPath"
     $duplicates = @()
     
     try {
@@ -250,10 +250,10 @@ function Find-DuplicateFiles {
             }
         }
     } catch {
-        Write-CleanupLog "❌ Lỗi quét: $($_.Exception.Message)"
+        Write-CleanupLog "[ERROR] Lỗi quét: $($_.Exception.Message)"
     }
     
-    Write-CleanupLog "🔍 Tìm thấy $($duplicates.Count) nhóm file trùng lặp"
+    Write-CleanupLog "[SCAN] Tìm thấy $($duplicates.Count) nhóm file trùng lặp"
     return $duplicates
 }
 
@@ -269,10 +269,10 @@ function Remove-DuplicateFiles {
                 Remove-Item $file -Force -ErrorAction Stop
                 $totalFreed += $size
                 $deletedCount++
-                Write-CleanupLog "✅ Đã xóa: $file"
+                Write-CleanupLog "[OK] Đã xóa: $file"
             }
         } catch {
-            Write-CleanupLog "❌ Lỗi xóa: $file - $($_.Exception.Message)"
+            Write-CleanupLog "[ERROR] Lỗi xóa: $file - $($_.Exception.Message)"
         }
     }
     
@@ -360,19 +360,19 @@ function Get-SystemHealth {
     # Recommendations
     $health.Recommendations = @()
     if ($health.TempSizeMB -gt 500) { 
-        $health.Recommendations += "🗑️ Dọn Temp files ($($health.TempSizeMB) MB)" 
+        $health.Recommendations += "[!] Dọn Temp files ($($health.TempSizeMB) MB)" 
     }
     if ($health.StartupApps -gt 10) { 
-        $health.Recommendations += "🚀 Giảm Startup apps (hiện tại: $($health.StartupApps))" 
+        $health.Recommendations += "[!] Giảm Startup apps (hiện tại: $($health.StartupApps))" 
     }
     if ($health.DiskUsedPercent -gt 85) { 
-        $health.Recommendations += "💾 Ổ đĩa gần đầy ($($health.DiskUsedPercent)%)" 
+        $health.Recommendations += "[!] Ổ đĩa gần đầy ($($health.DiskUsedPercent)%)" 
     }
     if ($health.CPU -gt 70) {
-        $health.Recommendations += "⚡ CPU đang tải cao ($($health.CPU)%)"
+        $health.Recommendations += "[!] CPU đang tải cao ($($health.CPU)%)"
     }
     if ($health.RAM -gt 80) {
-        $health.Recommendations += "🧠 RAM đang sử dụng nhiều ($($health.RAM)%)"
+        $health.Recommendations += "[!] RAM đang sử dụng nhiều ($($health.RAM)%)"
     }
     
     return $health
@@ -418,7 +418,7 @@ function Uninstall-AppCompletely {
     )
     
     try {
-        Write-CleanupLog "🗑️ Đang gỡ cài đặt: $AppName"
+        Write-CleanupLog "[UNINSTALL] Đang gỡ cài đặt: $AppName"
         
         # Run uninstaller
         if ($UninstallString -like "*msiexec*") {
@@ -447,12 +447,12 @@ function Uninstall-AppCompletely {
             }
         }
         
-        Write-CleanupLog "✅ Đã gỡ cài đặt: $AppName"
+        Write-CleanupLog "[OK] Đã gỡ cài đặt: $AppName"
         
         # Remove leftover folders
         if ($InstallLocation -and (Test-Path $InstallLocation -ErrorAction SilentlyContinue)) {
             Remove-Item $InstallLocation -Recurse -Force -ErrorAction SilentlyContinue
-            Write-CleanupLog "✅ Đã xóa thư mục: $InstallLocation"
+            Write-CleanupLog "[OK] Đã xóa thư mục: $InstallLocation"
         }
         
         # Remove AppData - use less aggressive sanitization
@@ -466,13 +466,13 @@ function Uninstall-AppCompletely {
         foreach ($path in $appDataPaths) {
             if (Test-Path $path -ErrorAction SilentlyContinue) {
                 Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
-                Write-CleanupLog "✅ Đã xóa AppData: $path"
+                Write-CleanupLog "[OK] Đã xóa AppData: $path"
             }
         }
         
         return $true
     } catch {
-        Write-CleanupLog "❌ Lỗi gỡ cài đặt: $AppName - $($_.Exception.Message)"
+        Write-CleanupLog "[ERROR] Lỗi gỡ cài đặt: $AppName - $($_.Exception.Message)"
         return $false
     }
 }
@@ -484,12 +484,12 @@ function New-CleanupRestorePoint {
         # Enable System Restore if disabled
         Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
         Checkpoint-Computer -Description "Trước khi Cleanup - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
-        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tạo Restore Point`n")
+        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da tao Restore Point`n")
         $logBox.ScrollToCaret()
         Write-CleanupLog "Đã tạo Restore Point thành công"
         return $true
     } catch {
-        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Không thể tạo Restore Point: $($_.Exception.Message)`n")
+        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Khong the tao Restore Point: $($_.Exception.Message)`n")
         $logBox.ScrollToCaret()
         Write-CleanupLog "Lỗi tạo Restore Point: $($_.Exception.Message)"
         return $false
@@ -607,7 +607,7 @@ $healthPanel.Controls.Add($lstRecommendations)
 
 # Refresh Health Button
 $btnRefreshHealth = New-Object System.Windows.Forms.Button
-$btnRefreshHealth.Text = "🔄"
+$btnRefreshHealth.Text = [char]0x27F3
 $btnRefreshHealth.Location = New-Object System.Drawing.Point(830, 15)
 $btnRefreshHealth.Size = New-Object System.Drawing.Size(50, 50)
 $btnRefreshHealth.Font = New-Object System.Drawing.Font("Segoe UI", 14)
@@ -655,7 +655,7 @@ $UpdateHealthDashboard = {
     # Update Recommendations
     $lstRecommendations.Items.Clear()
     if ($health.Recommendations.Count -eq 0) {
-        $lstRecommendations.Items.Add("✅ Hệ thống hoạt động tốt!")
+        $lstRecommendations.Items.Add("[OK] Hệ thống hoạt động tốt!")
     } else {
         foreach ($rec in $health.Recommendations) {
             $lstRecommendations.Items.Add($rec)
@@ -699,14 +699,14 @@ function Run-Safe($cmd, $cmdArgs, $timeoutSeconds = 300) {
             [System.Windows.Forms.Application]::DoEvents()
             Start-Sleep -Milliseconds 100
             
-            # ✅ Timeout protection
+            # [OK] Timeout protection
             if ([datetime]::Now -gt $timeout) {
                 $p.Kill()
                 throw "Timeout sau $timeoutSeconds giây"
             }
         }
         
-        # ✅ Kiểm tra exit code
+        # [OK] Kiểm tra exit code
         if ($p.ExitCode -ne 0) {
             throw "Lệnh thất bại với mã lỗi: $($p.ExitCode)"
         }
@@ -724,12 +724,12 @@ $CoreLogic = {
 
     # Show estimated disk space before cleanup
     $estimatedSpace = Get-EstimatedSpace
-    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] 📊 Ước tính dung lượng có thể giải phóng: ~$estimatedSpace MB`n")
+    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Ước tính dung lượng có thể giải phóng: ~$estimatedSpace MB`n")
     $logBox.ScrollToCaret()
     Write-CleanupLog "Bắt đầu cleanup - Ước tính giải phóng: ~$estimatedSpace MB"
 
     # Create restore point before cleanup
-    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] 🔄 Đang tạo điểm khôi phục hệ thống...`n")
+    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [REFRESH] Đang tạo điểm khôi phục hệ thống...`n")
     $logBox.ScrollToCaret()
     [System.Windows.Forms.Application]::DoEvents()
     New-CleanupRestorePoint -logBox $logBox
@@ -742,7 +742,7 @@ $CoreLogic = {
         $form.Text = "Cleanup Tool - Đang xử lý: $taskIndex/$totalTasks"
         
         # Cap nhat giao dien ngay lap tuc
-        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đang xử lý: $($taskList[$taskKey])...`n")
+        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đang xử lý: $($taskList[$taskKey])...`n")
         $logBox.ScrollToCaret()
         $form.Refresh()
         [System.Windows.Forms.Application]::DoEvents()
@@ -755,25 +755,25 @@ $CoreLogic = {
                         if (Test-Path "$env:TEMP") {
                             Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction Stop
                         }
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã xóa User Temp files`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã xóa User Temp files`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Một số Temp files đang được sử dụng`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Một số Temp files đang được sử dụng`n")
                     }
                     try {
                         if (Test-Path "$env:windir\Temp") {
                             Remove-Item "$env:windir\Temp\*" -Recurse -Force -ErrorAction Stop
                         }
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã xóa Windows Temp files`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã xóa Windows Temp files`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Một số Windows Temp files đang được sử dụng`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Một số Windows Temp files đang được sử dụng`n")
                     }
                 }
                 "RecycleBin"{
                     try {
                         Clear-RecycleBin -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã dọn Thùng rác`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã dọn Thùng rác`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Thùng rác đã trống hoặc lỗi: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Thùng rác đã trống hoặc lỗi: $($_.Exception.Message)`n")
                     }
                 }
                 "BrowserCache"{
@@ -788,9 +788,9 @@ $CoreLogic = {
                         if (Test-Path $edgeCache) {
                             Remove-Item "$edgeCache\*" -Recurse -Force -ErrorAction SilentlyContinue
                         }
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã xóa cache trình duyệt`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã xóa cache trình duyệt`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi cache: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi cache: $($_.Exception.Message)`n")
                     }
                 }
                 "WinUpdateCache"{
@@ -800,9 +800,9 @@ $CoreLogic = {
                             Remove-Item "$env:windir\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction Stop
                         }
                         Start-Service wuauserv -ErrorAction SilentlyContinue
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã xóa Windows Update Cache`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã xóa Windows Update Cache`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Update Cache: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Update Cache: $($_.Exception.Message)`n")
                         Start-Service wuauserv -ErrorAction SilentlyContinue
                     }
                 }
@@ -814,9 +814,9 @@ $CoreLogic = {
                             Remove-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache_*.db" -Force -ErrorAction SilentlyContinue
                         }
                         Start-Process explorer
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã xóa Thumbnail cache`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã xóa Thumbnail cache`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Thumbnail: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Thumbnail: $($_.Exception.Message)`n")
                         Start-Process explorer -ErrorAction SilentlyContinue
                     }
                 }
@@ -826,13 +826,13 @@ $CoreLogic = {
                     try {
                         $proc = Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" -Wait -PassThru -NoNewWindow -ErrorAction Stop
                         if ($proc.ExitCode -eq 0) {
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã dọn WinSxS`n")
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã dọn WinSxS`n")
                             Write-CleanupLog "Đã dọn WinSxS"
                         } else {
                             throw "Exit code: $($proc.ExitCode)"
                         }
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi WinSxS: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi WinSxS: $($_.Exception.Message)`n")
                         Write-CleanupLog "Lỗi WinSxS: $($_.Exception.Message)"
                     }
                 }
@@ -841,35 +841,35 @@ $CoreLogic = {
                         $wsreset = "$env:windir\System32\WSReset.exe"
                         if (Test-Path $wsreset) {
                             Start-Process $wsreset -Wait -NoNewWindow -ErrorAction Stop
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã reset Store Cache`n")
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã reset Store Cache`n")
                             Write-CleanupLog "Đã reset Microsoft Store"
                         } else {
                             throw "WSReset.exe không tìm thấy"
                         }
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Store Cache: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Store Cache: $($_.Exception.Message)`n")
                         Write-CleanupLog "Lỗi Store Cache: $($_.Exception.Message)"
                     }
                 }
                 "Hibernation"{ 
                     try {
                         Start-Process "powercfg.exe" -ArgumentList "/hibernate off" -Wait -NoNewWindow -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Hibernation`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Hibernation`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Hibernation: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Hibernation: $($_.Exception.Message)`n")
                     }
                 }
                 "CompressNTFS"{ 
                     try {
                         $proc = Start-Process "compact.exe" -ArgumentList "/CompactOS:always" -Wait -PassThru -NoNewWindow -ErrorAction Stop
                         if ($proc.ExitCode -eq 0) {
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã nén NTFS`n")
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã nén NTFS`n")
                             Write-CleanupLog "Đã bật CompactOS"
                         } else {
                             throw "Exit code: $($proc.ExitCode). Có thể hệ thống đã được nén rồi."
                         }
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi nén NTFS: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi nén NTFS: $($_.Exception.Message)`n")
                         Write-CleanupLog "Lỗi CompactOS: $($_.Exception.Message)"
                     }
                 }
@@ -879,38 +879,38 @@ $CoreLogic = {
                         $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Serialize"
                         if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
                         Set-ItemProperty $regPath -Name "StartupDelayInMSec" -Value 0 -Type DWORD -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tối ưu Startup`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tối ưu Startup`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Startup: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Startup: $($_.Exception.Message)`n")
                     }
                 }
                 "ServiceOptimize"{
                     try {
                         Stop-Service "DiagTrack" -ErrorAction SilentlyContinue
                         Set-Service "DiagTrack" -StartupType Disabled -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tối ưu Services`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tối ưu Services`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Services: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Services: $($_.Exception.Message)`n")
                     }
                 }
                 "BasicMalware"{ 
                     try {
                         if (Get-Command Start-MpScan -ErrorAction SilentlyContinue) {
                             Start-MpScan -ScanType QuickScan -AsJob | Out-Null
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã bắt đầu quét virus`n")
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã bắt đầu quét virus`n")
                         } else {
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Windows Defender không khả dụng`n")
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Windows Defender không khả dụng`n")
                         }
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi quét virus: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi quét virus: $($_.Exception.Message)`n")
                     }
                 }
                 "EnsureFirewallEnabled"{
                     try {
                         Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã bật Firewall`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã bật Firewall`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Firewall: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Firewall: $($_.Exception.Message)`n")
                     }
                 }
                 "EnablePUAProtection"{
@@ -918,13 +918,13 @@ $CoreLogic = {
                         $defenderService = Get-Service -Name WinDefend -ErrorAction SilentlyContinue
                         if ($defenderService -and $defenderService.Status -eq 'Running') {
                             Set-MpPreference -PUAProtection Enabled -ErrorAction Stop
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã bật PUA Protection`n")
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã bật PUA Protection`n")
                             Write-CleanupLog "Đã bật PUA Protection"
                         } else {
                             throw "Windows Defender chưa chạy hoặc không khả dụng"
                         }
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi PUA: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi PUA: $($_.Exception.Message)`n")
                         Write-CleanupLog "Lỗi PUA: $($_.Exception.Message)"
                     }
                 }
@@ -935,10 +935,10 @@ $CoreLogic = {
                             New-Item -Path $regPath -Force | Out-Null 
                         }
                         Set-ItemProperty -Path $regPath -Name "Value" -Value "Deny" -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Microphone`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Microphone`n")
                         Write-CleanupLog "Đã tắt Microphone"
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Microphone: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Microphone: $($_.Exception.Message)`n")
                         Write-CleanupLog "Lỗi Microphone: $($_.Exception.Message)"
                     }
                 }
@@ -947,17 +947,17 @@ $CoreLogic = {
                         $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo"
                         if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
                         Set-ItemProperty $regPath -Name "Enabled" -Value 0 -Type DWord -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Advertising ID`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Advertising ID`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Advertising: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Advertising: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableTelemetryServices"{
                     try {
                         Stop-Service "DiagTrack","dmwappushservice" -ErrorAction SilentlyContinue
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Telemetry`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Telemetry`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Telemetry: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Telemetry: $($_.Exception.Message)`n")
                     }
                 }
                 
@@ -966,26 +966,26 @@ $CoreLogic = {
                         $guid = (powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61)
                         if ($guid -match '\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b') {
                             powercfg /setactive $matches[0]
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã bật High Performance`n")
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã bật High Performance`n")
                         }
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Power Plan: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Power Plan: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableGameDVR"{ 
                     try {
                         Set-ItemProperty "HKCU:\System\GameConfigStore" -Name "GameDVR_Enabled" -Value 0 -Type DWord -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Game DVR`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Game DVR`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Game DVR: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Game DVR: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableStickyKeys"{ 
                     try {
                         Set-ItemProperty "HKCU:\Control Panel\Accessibility\StickyKeys" -Name "Flags" -Value 506 -Type String -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Sticky Keys`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Sticky Keys`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Sticky Keys: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Sticky Keys: $($_.Exception.Message)`n")
                     }
                 }
                 "ShowExtensions"{ 
@@ -993,25 +993,25 @@ $CoreLogic = {
                         Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0 -Type DWord -Force -ErrorAction Stop
                         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
                         Start-Process explorer
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã hiện Extensions`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã hiện Extensions`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Extensions: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Extensions: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableRemoteAssist"{ 
                     try {
                         Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowToGetHelp" -Value 0 -Type DWord -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Remote Assist`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Remote Assist`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Remote Assist: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Remote Assist: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableSMB1"{ 
                     try {
                         Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt SMB1`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt SMB1`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi SMB1: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi SMB1: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableCortana"{ 
@@ -1019,17 +1019,17 @@ $CoreLogic = {
                         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
                         if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
                         Set-ItemProperty $regPath -Name "AllowCortana" -Value 0 -Type DWord -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Cortana`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Cortana`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Cortana: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Cortana: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableStartSugg"{ 
                     try {
                         Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SystemPaneSuggestionsEnabled" -Value 0 -Type DWord -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Start Suggestions`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Start Suggestions`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Start Suggestions: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Start Suggestions: $($_.Exception.Message)`n")
                     }
                 }
                 "DisableFeedback"{ 
@@ -1037,9 +1037,9 @@ $CoreLogic = {
                         $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Siuf\Rules"
                         if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
                         Set-ItemProperty $regPath -Name "NumberOfSIUFInPeriod" -Value 0 -Type DWord -Force -ErrorAction Stop
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Feedback`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Feedback`n")
                     } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Feedback: $($_.Exception.Message)`n")
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Feedback: $($_.Exception.Message)`n")
                     }
                 }
             }
@@ -1053,7 +1053,7 @@ $CoreLogic = {
         }
     }
     $form.Text = "System Maintenance Tool v12.0 (CCleaner Pro Features)"
-    $logBox.AppendText("=== ✅ HOÀN TẤT ===`n")
+    $logBox.AppendText("=== [OK] HOÀN TẤT ===`n")
     $logBox.ScrollToCaret()
     Write-CleanupLog "Hoàn tất cleanup"
     [System.Windows.Forms.MessageBox]::Show("Đã hoàn thành tác vụ!", "Thông báo")
@@ -1082,7 +1082,7 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
         
         # FIX: Gan su kien Click cho nut chay nhanh
 		$btnQuick.Add_Click({
-			# ✅ Ngăn click nhiều lần
+			# [OK] Ngăn click nhiều lần
 			if (-not $this.Enabled) { return }
 			$this.Enabled = $false
     
@@ -1095,9 +1095,9 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
     
 			& $CoreLogic $currentTasks
     
-			# ✅ Bật lại nút sau khi chạy xong
+			# [OK] Bật lại nút sau khi chạy xong
 			$this.Enabled = $true
-		}. GetNewClosure())  # ✅ QUAN TRỌNG: Tránh scope leak
+		}. GetNewClosure())  # [OK] QUAN TRỌNG: Tránh scope leak
         
         $tab.Controls.Add($btnQuick)
     }
@@ -1210,9 +1210,9 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
             "FlushDnsCache" { 
                 try {
                     $result = Invoke-Expression "ipconfig /flushdns"
-                    [System.Windows.Forms.MessageBox]::Show("✅ Đã xóa DNS Cache thành công!", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                    [System.Windows.Forms.MessageBox]::Show("[OK] Đã xóa DNS Cache thành công!", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
                 } catch {
-                    [System.Windows.Forms.MessageBox]::Show("❌ Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                 }
             }
             "RegBack" { 
@@ -1220,14 +1220,14 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                 try {
                     $proc = Start-Process reg -ArgumentList "export HKCU `"$backupPath`"" -Wait -PassThru -NoNewWindow
                     if ($proc.ExitCode -eq 0 -and (Test-Path $backupPath)) {
-                        [System.Windows.Forms.MessageBox]::Show("✅ Backup thành công!`n`nFile: $backupPath", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                        [System.Windows.Forms.MessageBox]::Show("[OK] Backup thành công!`n`nFile: $backupPath", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
                         Write-CleanupLog "Registry backup thành công: $backupPath"
                     } else {
-                        [System.Windows.Forms.MessageBox]::Show("❌ Backup thất bại!`n`nMã lỗi: $($proc.ExitCode)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                        [System.Windows.Forms.MessageBox]::Show("[ERROR] Backup thất bại!`n`nMã lỗi: $($proc.ExitCode)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                         Write-CleanupLog "Registry backup thất bại"
                     }
                 } catch {
-                    [System.Windows.Forms.MessageBox]::Show("❌ Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                 }
             }
             "ChkDsk" { Get-PhysicalDisk | Select FriendlyName,HealthStatus | Out-GridView -Title "Sức khỏe ổ cứng" }
@@ -1235,7 +1235,7 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                 $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc muốn reset cấu hình mạng?`n`nSau khi hoàn tất cần restart máy.", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
                 if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
                     Start-Process netsh -ArgumentList "int ip reset" -Wait
-                    [System.Windows.Forms.MessageBox]::Show("✅ Xong! Vui lòng restart máy.", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                    [System.Windows.Forms.MessageBox]::Show("[OK] Xong! Vui lòng restart máy.", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
                 }
             }
             "StartupManager" { Start-Process taskmgr }
@@ -1335,7 +1335,7 @@ $btnScanReg.Add_Click({
         if ($global:RegIssues.Count -gt 0) {
             $btnCleanReg.Enabled = $true
         } else {
-            $lstRegIssues.Items.Add("✅ Không tìm thấy lỗi Registry!")
+            $lstRegIssues.Items.Add("[OK] Không tìm thấy lỗi Registry!")
         }
     } catch {
         [System.Windows.Forms.MessageBox]::Show("Lỗi khi quét: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
@@ -1355,7 +1355,7 @@ $btnCleanReg.Add_Click({
         
         try {
             $cleaned = Clean-RegistryIssues -Issues $global:RegIssues
-            [System.Windows.Forms.MessageBox]::Show("✅ Đã dọn dẹp $cleaned lỗi Registry!`n`nFile backup đã được lưu trên Desktop.", "Hoàn thành", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            [System.Windows.Forms.MessageBox]::Show("[OK] Đã dọn dẹp $cleaned lỗi Registry!`n`nFile backup đã được lưu trên Desktop.", "Hoàn thành", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
             
             $lstRegIssues.Items.Clear()
             $global:RegIssues = @()
@@ -1496,7 +1496,7 @@ $btnScanDup.Add_Click({
             $btnDeleteDup.Enabled = $true
         } else {
             $lstDuplicates.Items.Clear()
-            $item = New-Object System.Windows.Forms.ListViewItem("✅ Không tìm thấy file trùng lặp!")
+            $item = New-Object System.Windows.Forms.ListViewItem("[OK] Không tìm thấy file trùng lặp!")
             $lstDuplicates.Items.Add($item)
         }
     } catch {
@@ -1524,7 +1524,7 @@ $btnDeleteDup.Add_Click({
     
     if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
         $result = Remove-DuplicateFiles -FilesToDelete $filesToDelete
-        [System.Windows.Forms.MessageBox]::Show("✅ Đã xóa $($result.DeletedCount) file!`nĐã giải phóng: $($result.FreedMB) MB", "Hoàn thành", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+        [System.Windows.Forms.MessageBox]::Show("[OK] Đã xóa $($result.DeletedCount) file!`nĐã giải phóng: $($result.FreedMB) MB", "Hoàn thành", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
         
         # Refresh list
         $lstDuplicates.Items.Clear()
@@ -1668,10 +1668,10 @@ $btnUninstall.Add_Click({
         $result = Uninstall-AppCompletely -UninstallString $selectedApp.UninstallString -AppName $selectedApp.Name -InstallLocation $selectedApp.InstallLocation
         
         if ($result) {
-            [System.Windows.Forms.MessageBox]::Show("✅ Đã gỡ cài đặt thành công: $($selectedApp.Name)`n`nCác file thừa đã được xóa.", "Hoàn thành", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            [System.Windows.Forms.MessageBox]::Show("[OK] Đã gỡ cài đặt thành công: $($selectedApp.Name)`n`nCác file thừa đã được xóa.", "Hoàn thành", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
             & $LoadApps
         } else {
-            [System.Windows.Forms.MessageBox]::Show("⚠️ Có lỗi khi gỡ cài đặt. Vui lòng kiểm tra log.", "Cảnh báo", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+            [System.Windows.Forms.MessageBox]::Show("[WARN] Có lỗi khi gỡ cài đặt. Vui lòng kiểm tra log.", "Cảnh báo", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
         }
         
         $this.Text = "GỠ CÀI ĐẶT + XÓA FILE THỪA"

@@ -144,7 +144,7 @@ function Scan-RegistryIssues {
         } catch {}
     }
     
-    Write-CleanupLog "[SCAN] Quet Registry: Tim thay $($issues.Count) van de"
+    Write-CleanupLog "[SCAN] Quét Registry: Tìm thấy $($issues.Count) vấn đề"
     return $issues
 }
 
@@ -195,9 +195,9 @@ function Clean-RegistryIssues {
                     # Skip icon issues - they don't affect system stability
                 }
             }
-            Write-CleanupLog "[OK] Da xoa: $($issue.Description)"
+            Write-CleanupLog "[OK] Đã xóa: $($issue.Description)"
         } catch {
-            Write-CleanupLog "[WARN] Khong the xoa: $($issue.Description)"
+            Write-CleanupLog "[WARN] Không thể xóa: $($issue.Description)"
         }
     }
     
@@ -211,7 +211,7 @@ function Find-DuplicateFiles {
         [int]$MinSizeMB = 1
     )
     
-    Write-CleanupLog "[SCAN] Dang quet file trung lap trong: $ScanPath"
+    Write-CleanupLog "[SCAN] Đang quét file trùng lặp trong: $ScanPath"
     $duplicates = @()
     
     try {
@@ -250,10 +250,10 @@ function Find-DuplicateFiles {
             }
         }
     } catch {
-        Write-CleanupLog "[ERROR] Loi quet: $($_.Exception.Message)"
+        Write-CleanupLog "[ERROR] Lỗi quét: $($_.Exception.Message)"
     }
     
-    Write-CleanupLog "[SCAN] Tim thay $($duplicates.Count) nhom file trung lap"
+    Write-CleanupLog "[SCAN] Tìm thấy $($duplicates.Count) nhóm file trùng lặp"
     return $duplicates
 }
 
@@ -269,10 +269,10 @@ function Remove-DuplicateFiles {
                 Remove-Item $file -Force -ErrorAction Stop
                 $totalFreed += $size
                 $deletedCount++
-                Write-CleanupLog "[OK] Da xoa: $file"
+                Write-CleanupLog "[OK] Đã xóa: $file"
             }
         } catch {
-            Write-CleanupLog "[ERROR] Loi xoa: $file - $($_.Exception.Message)"
+            Write-CleanupLog "[ERROR] Lỗi xóa: $file - $($_.Exception.Message)"
         }
     }
     
@@ -360,19 +360,19 @@ function Get-SystemHealth {
     # Recommendations
     $health.Recommendations = @()
     if ($health.TempSizeMB -gt 500) { 
-        $health.Recommendations += "[!] Don Temp files ($($health.TempSizeMB) MB)" 
+        $health.Recommendations += "[!] Dọn Temp files ($($health.TempSizeMB) MB)" 
     }
     if ($health.StartupApps -gt 10) { 
-        $health.Recommendations += "[!] Giam Startup apps (hien tai: $($health.StartupApps))" 
+        $health.Recommendations += "[!] Giảm Startup apps (hiện tại: $($health.StartupApps))" 
     }
     if ($health.DiskUsedPercent -gt 85) { 
-        $health.Recommendations += "[!] O dia gan day ($($health.DiskUsedPercent)%)" 
+        $health.Recommendations += "[!] Ổ đĩa gần đầy ($($health.DiskUsedPercent)%)" 
     }
     if ($health.CPU -gt 70) {
-        $health.Recommendations += "[!] CPU dang tai cao ($($health.CPU)%)"
+        $health.Recommendations += "[!] CPU đang tải cao ($($health.CPU)%)"
     }
     if ($health.RAM -gt 80) {
-        $health.Recommendations += "[!] RAM dang su dung nhieu ($($health.RAM)%)"
+        $health.Recommendations += "[!] RAM đang sử dụng nhiều ($($health.RAM)%)"
     }
     
     return $health
@@ -418,7 +418,7 @@ function Uninstall-AppCompletely {
     )
     
     try {
-        Write-CleanupLog "[UNINSTALL] Dang go cai dat: $AppName"
+        Write-CleanupLog "[UNINSTALL] Đang gỡ cài đặt: $AppName"
         
         # Run uninstaller
         if ($UninstallString -like "*msiexec*") {
@@ -447,12 +447,12 @@ function Uninstall-AppCompletely {
             }
         }
         
-        Write-CleanupLog "[OK] Da go cai dat: $AppName"
+        Write-CleanupLog "[OK] Đã gỡ cài đặt: $AppName"
         
         # Remove leftover folders
         if ($InstallLocation -and (Test-Path $InstallLocation -ErrorAction SilentlyContinue)) {
             Remove-Item $InstallLocation -Recurse -Force -ErrorAction SilentlyContinue
-            Write-CleanupLog "[OK] Da xoa thu muc: $InstallLocation"
+            Write-CleanupLog "[OK] Đã xóa thư mục: $InstallLocation"
         }
         
         # Remove AppData - use less aggressive sanitization
@@ -466,13 +466,13 @@ function Uninstall-AppCompletely {
         foreach ($path in $appDataPaths) {
             if (Test-Path $path -ErrorAction SilentlyContinue) {
                 Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
-                Write-CleanupLog "[OK] Da xoa AppData: $path"
+                Write-CleanupLog "[OK] Đã xóa AppData: $path"
             }
         }
         
         return $true
     } catch {
-        Write-CleanupLog "[ERROR] Loi go cai dat: $AppName - $($_.Exception.Message)"
+        Write-CleanupLog "[ERROR] Lỗi gỡ cài đặt: $AppName - $($_.Exception.Message)"
         return $false
     }
 }
@@ -655,7 +655,7 @@ $UpdateHealthDashboard = {
     # Update Recommendations
     $lstRecommendations.Items.Clear()
     if ($health.Recommendations.Count -eq 0) {
-        $lstRecommendations.Items.Add("[OK] He thong hoat dong tot!")
+        $lstRecommendations.Items.Add("[OK] Hệ thống hoạt động tốt!")
     } else {
         foreach ($rec in $health.Recommendations) {
             $lstRecommendations.Items.Add($rec)

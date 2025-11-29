@@ -151,13 +151,23 @@ function Scan-RegistryIssues {
 function Clean-RegistryIssues {
     param([array]$Issues)
     
-    # Backup registry first
-    $backupPath = "$env:USERPROFILE\Desktop\RegBackup_$(Get-Date -Format 'yyyyMMdd_HHmmss').reg"
+    # Backup registry first - backup both HKLM and HKCU
+    $backupFolder = "$env:USERPROFILE\Desktop"
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $backupHKLM = "$backupFolder\RegBackup_HKLM_$timestamp.reg"
+    $backupHKCU = "$backupFolder\RegBackup_HKCU_$timestamp.reg"
+    
     try {
-        $proc = Start-Process reg -ArgumentList "export HKLM\SOFTWARE `"$backupPath`"" -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
-        Write-CleanupLog "✅ Đã sao lưu Registry: $backupPath"
+        $proc1 = Start-Process reg -ArgumentList "export HKLM\SOFTWARE `"$backupHKLM`"" -Wait -PassThru -NoNewWindow -ErrorAction Stop
+        $proc2 = Start-Process reg -ArgumentList "export HKCU `"$backupHKCU`"" -Wait -PassThru -NoNewWindow -ErrorAction Stop
+        
+        if ($proc1.ExitCode -eq 0 -and $proc2.ExitCode -eq 0) {
+            Write-CleanupLog "✅ Đã sao lưu Registry: $backupHKLM và $backupHKCU"
+        } else {
+            Write-CleanupLog "⚠️ Sao lưu Registry có thể chưa hoàn chỉnh"
+        }
     } catch {
-        Write-CleanupLog "⚠️ Không thể sao lưu Registry"
+        Write-CleanupLog "⚠️ Không thể sao lưu Registry: $($_.Exception.Message)"
     }
     
     $cleaned = 0
@@ -412,21 +422,27 @@ function Uninstall-AppCompletely {
         
         # Run uninstaller
         if ($UninstallString -like "*msiexec*") {
-            if ($UninstallString -match '\{[0-9A-Fa-f-]+\}') {
+            # Improved MSI product code regex: exactly 8-4-4-4-12 hex characters
+            if ($UninstallString -match '\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}') {
                 $productCode = $matches[0]
                 $proc = Start-Process msiexec -ArgumentList "/x $productCode /qn /norestart" -Wait -PassThru -NoNewWindow -ErrorAction Stop
             } else {
+                # Fallback: run the original uninstall command with silent flag
                 $proc = Start-Process cmd -ArgumentList "/c `"$UninstallString`" /qn" -Wait -PassThru -NoNewWindow -ErrorAction Stop
             }
         } else {
             $cleanCmd = $UninstallString -replace '^"([^"]+)".*', '$1'
-            $args = $UninstallString -replace '^"[^"]+"(.*)$', '$1'
-            if (!$args -or $args -eq $UninstallString) { 
-                $args = "/S /SILENT /VERYSILENT /NORESTART" 
+            $existingArgs = $UninstallString -replace '^"[^"]+"(.*)$', '$1'
+            
+            # Only add silent args if no args exist, don't override existing args
+            if (!$existingArgs -or $existingArgs -eq $UninstallString) { 
+                $existingArgs = "/S"  # Use only /S which is most universal
             }
-            if (Test-Path $cleanCmd) {
-                $proc = Start-Process $cleanCmd -ArgumentList $args -Wait -PassThru -NoNewWindow -ErrorAction Stop
+            
+            if (Test-Path $cleanCmd -ErrorAction SilentlyContinue) {
+                $proc = Start-Process $cleanCmd -ArgumentList $existingArgs -Wait -PassThru -NoNewWindow -ErrorAction Stop
             } else {
+                # Fallback: run the original uninstall command as-is
                 $proc = Start-Process cmd -ArgumentList "/c `"$UninstallString`"" -Wait -PassThru -NoNewWindow -ErrorAction Stop
             }
         }
@@ -434,13 +450,13 @@ function Uninstall-AppCompletely {
         Write-CleanupLog "✅ Đã gỡ cài đặt: $AppName"
         
         # Remove leftover folders
-        if ($InstallLocation -and (Test-Path $InstallLocation)) {
+        if ($InstallLocation -and (Test-Path $InstallLocation -ErrorAction SilentlyContinue)) {
             Remove-Item $InstallLocation -Recurse -Force -ErrorAction SilentlyContinue
             Write-CleanupLog "✅ Đã xóa thư mục: $InstallLocation"
         }
         
-        # Remove AppData
-        $cleanAppName = $AppName -replace '[^\w\s-]', ''
+        # Remove AppData - use less aggressive sanitization
+        $cleanAppName = $AppName -replace '[<>:"/\\|?*]', ''  # Only remove invalid path chars
         $appDataPaths = @(
             "$env:LOCALAPPDATA\$cleanAppName",
             "$env:APPDATA\$cleanAppName",
@@ -448,7 +464,7 @@ function Uninstall-AppCompletely {
         )
         
         foreach ($path in $appDataPaths) {
-            if (Test-Path $path) {
+            if (Test-Path $path -ErrorAction SilentlyContinue) {
                 Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
                 Write-CleanupLog "✅ Đã xóa AppData: $path"
             }

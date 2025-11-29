@@ -302,6 +302,7 @@ $CoreLogic = {
                         }
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ⚠️ Lỗi Store Cache: $($_.Exception.Message)`n")
+                        Write-CleanupLog "Lỗi Store Cache: $($_.Exception.Message)"
                     }
                 }
                 "Hibernation"{ 
@@ -384,7 +385,9 @@ $CoreLogic = {
                 "DisableMicrophone"{
                     try {
                         $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
-                        if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+                        if (-not (Test-Path $regPath)) { 
+                            New-Item -Path $regPath -Force | Out-Null 
+                        }
                         Set-ItemProperty -Path $regPath -Name "Value" -Value "Deny" -ErrorAction Stop
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] ✅ Đã tắt Microphone`n")
                         Write-CleanupLog "Đã tắt Microphone"

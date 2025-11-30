@@ -24,7 +24,7 @@ jobs:
       shell: pwsh
       run: |
         if (Test-Path .\Tests\IntegrationTest.ps1) {
-          .\Tests\IntegrationTest. ps1
+          .\Tests\IntegrationTest.ps1
         } else {
           Write-Host "Integration tests not found, skipping..."
         }

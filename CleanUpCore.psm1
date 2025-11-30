@@ -83,23 +83,34 @@ function Remove-SecureItem {
             return $true
         }
         
+        # Use chunked writing for large files to prevent memory issues
+        $chunkSize = 1MB
+        $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+        
         # Overwrite file content multiple passes
         for ($pass = 1; $pass -le $Passes; $pass++) {
             try {
-                # Generate random bytes for overwriting
-                $randomBytes = New-Object byte[] $fileSize
-                $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-                $rng.GetBytes($randomBytes)
-                
-                # Write random bytes to file
-                [System.IO.File]::WriteAllBytes($Path, $randomBytes)
-                
-                # Clean up
-                $rng.Dispose()
+                $fileStream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write)
+                try {
+                    $bytesRemaining = $fileSize
+                    while ($bytesRemaining -gt 0) {
+                        $currentChunkSize = [math]::Min($chunkSize, $bytesRemaining)
+                        $randomBytes = New-Object byte[] $currentChunkSize
+                        $rng.GetBytes($randomBytes)
+                        $fileStream.Write($randomBytes, 0, $currentChunkSize)
+                        $bytesRemaining -= $currentChunkSize
+                    }
+                } finally {
+                    $fileStream.Close()
+                    $fileStream.Dispose()
+                }
             } catch {
                 Write-CleanupLog "[WARN] Secure delete pass $pass failed for: $Path - $($_.Exception.Message)"
             }
         }
+        
+        # Clean up RNG
+        $rng.Dispose()
         
         # Finally delete the file
         Remove-Item -Path $Path -Force -ErrorAction Stop
@@ -118,6 +129,7 @@ function Clean-BrowserCache {
     [CmdletBinding()]
     param()
     
+    $cleanedBrowsersHash = @{}
     $results = @{
         CleanedBrowsers = @()
         Errors = @()
@@ -134,9 +146,9 @@ function Clean-BrowserCache {
         "Opera GX" = "$env:LOCALAPPDATA\Opera Software\Opera GX Stable\Cache"
     }
     
-    # Stop browser processes first
+    # Stop browser processes first (include all known process names)
     try {
-        Stop-Process -Name chrome, msedge, firefox, brave, opera -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name chrome, msedge, firefox, brave, opera, opera_gx -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
     } catch {
         # Ignore errors when stopping processes
@@ -155,8 +167,8 @@ function Clean-BrowserCache {
                     foreach ($resolvedPath in $resolvedPaths) {
                         $filesDeleted = Clean-CacheDirectory -CachePath $resolvedPath.Path -BrowserName $browser
                         $results.TotalFilesDeleted += $filesDeleted
-                        if ($filesDeleted -gt 0) {
-                            $results.CleanedBrowsers += $browser
+                        if ($filesDeleted -gt 0 -and -not $cleanedBrowsersHash.ContainsKey($browser)) {
+                            $cleanedBrowsersHash[$browser] = $true
                         }
                     }
                 }
@@ -164,8 +176,8 @@ function Clean-BrowserCache {
                 if (Test-Path $cachePath) {
                     $filesDeleted = Clean-CacheDirectory -CachePath $cachePath -BrowserName $browser
                     $results.TotalFilesDeleted += $filesDeleted
-                    if ($filesDeleted -gt 0) {
-                        $results.CleanedBrowsers += $browser
+                    if ($filesDeleted -gt 0 -and -not $cleanedBrowsersHash.ContainsKey($browser)) {
+                        $cleanedBrowsersHash[$browser] = $true
                     }
                 }
             }
@@ -174,6 +186,9 @@ function Clean-BrowserCache {
             Write-CleanupLog "[ERROR] $browser cache cleanup failed: $($_.Exception.Message)"
         }
     }
+    
+    # Convert hashtable keys to array for the result
+    $results.CleanedBrowsers = @($cleanedBrowsersHash.Keys)
     
     Write-CleanupLog "[OK] Browser cache cleanup completed. Deleted $($results.TotalFilesDeleted) files from $($results.CleanedBrowsers.Count) browsers."
     
@@ -239,7 +254,7 @@ function Clean-CacheDirectory {
         
         Write-CleanupLog "[OK] Cleaned $BrowserName cache: $deletedCount files deleted from $CachePath"
     } catch {
-        Write-CleanupLog "[WARN] Error cleaning $BrowserName cache at $CachePath : $($_.Exception.Message)"
+        Write-CleanupLog "[WARN] Error cleaning $BrowserName cache at $CachePath: $($_.Exception.Message)"
     }
     
     return $deletedCount

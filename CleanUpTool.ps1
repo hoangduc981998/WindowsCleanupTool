@@ -68,15 +68,15 @@ function New-CleanupRestorePoint {
     try {
         # Enable System Restore if disabled
         Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
-        Checkpoint-Computer -Description "Trước khi Cleanup - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+        Checkpoint-Computer -Description "Truoc khi Cleanup - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da tao Restore Point`n")
         $logBox.ScrollToCaret()
-        Write-CleanupLog "Đã tạo Restore Point thành công"
+        Write-CleanupLog "Da tao Restore Point thanh cong"
         return $true
     } catch {
         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [CAUTION] Khong the tao Restore Point: $($_.Exception.Message)`n")
         $logBox.ScrollToCaret()
-        Write-CleanupLog "Lỗi tạo Restore Point: $($_.Exception.Message)"
+        Write-CleanupLog "Loi tao Restore Point: $($_.Exception.Message)"
         return $false
     }
 }
@@ -153,16 +153,16 @@ function Run-Safe($cmd, $cmdArgs, $timeoutSeconds = 300) {
             [System.Windows.Forms.Application]::DoEvents()
             Start-Sleep -Milliseconds 100
             
-            # ✅ Timeout protection
+            # Timeout protection
             if ([datetime]::Now -gt $timeout) {
                 $p.Kill()
-                throw "Timeout sau $timeoutSeconds giây"
+                throw "Timeout sau $timeoutSeconds giay"
             }
         }
         
-        # ✅ Kiểm tra exit code
+        # Kiem tra exit code
         if ($p.ExitCode -ne 0) {
-            throw "Lệnh thất bại với mã lỗi: $($p.ExitCode)"
+            throw "Lenh that bai voi ma loi: $($p.ExitCode)"
         }
     }
 }
@@ -180,7 +180,7 @@ $CoreLogic = {
     $estimatedSpace = Get-EstimatedSpace
     $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Uoc tinh dung luong co the giai phong: ~$estimatedSpace MB`n")
     $logBox.ScrollToCaret()
-    Write-CleanupLog "Bắt đầu cleanup - Ước tính giải phóng: ~$estimatedSpace MB"
+    Write-CleanupLog "Bat dau cleanup - Uoc tinh giai phong: ~$estimatedSpace MB"
 
     # Create restore point before cleanup
     $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [...] Dang tao diem khoi phuc he thong...`n")
@@ -281,13 +281,13 @@ $CoreLogic = {
                         $proc = Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" -Wait -PassThru -NoNewWindow -ErrorAction Stop
                         if ($proc.ExitCode -eq 0) {
                             $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da don WinSxS`n")
-                            Write-CleanupLog "Đã dọn WinSxS"
+                            Write-CleanupLog "Da don WinSxS"
                         } else {
                             throw "Exit code: $($proc.ExitCode)"
                         }
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [CAUTION] Loi WinSxS: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi WinSxS: $($_.Exception.Message)"
+                        Write-CleanupLog "Loi WinSxS: $($_.Exception.Message)"
                     }
                 }
                 "StoreCache"{ 
@@ -296,13 +296,13 @@ $CoreLogic = {
                         if (Test-Path $wsreset) {
                             Start-Process $wsreset -Wait -NoNewWindow -ErrorAction Stop
                             $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da reset Store Cache`n")
-                            Write-CleanupLog "Đã reset Microsoft Store"
+                            Write-CleanupLog "Da reset Microsoft Store"
                         } else {
-                            throw "WSReset.exe không tìm thấy"
+                            throw "WSReset.exe khong tim thay"
                         }
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [CAUTION] Loi Store Cache: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi Store Cache: $($_.Exception.Message)"
+                        Write-CleanupLog "Loi Store Cache: $($_.Exception.Message)"
                     }
                 }
                 "Hibernation"{ 
@@ -318,13 +318,13 @@ $CoreLogic = {
                         $proc = Start-Process "compact.exe" -ArgumentList "/CompactOS:always" -Wait -PassThru -NoNewWindow -ErrorAction Stop
                         if ($proc.ExitCode -eq 0) {
                             $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da nen NTFS`n")
-                            Write-CleanupLog "Đã bật CompactOS"
+                            Write-CleanupLog "Da bat CompactOS"
                         } else {
-                            throw "Exit code: $($proc.ExitCode). Có thể hệ thống đã được nén rồi."
+                            throw "Exit code: $($proc.ExitCode). Co the he thong da duoc nen roi."
                         }
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [CAUTION] Loi nen NTFS: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi CompactOS: $($_.Exception.Message)"
+                        Write-CleanupLog "Loi CompactOS: $($_.Exception.Message)"
                     }
                 }
                 
@@ -373,13 +373,13 @@ $CoreLogic = {
                         if ($defenderService -and $defenderService.Status -eq 'Running') {
                             Set-MpPreference -PUAProtection Enabled -ErrorAction Stop
                             $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da bat PUA Protection`n")
-                            Write-CleanupLog "Đã bật PUA Protection"
+                            Write-CleanupLog "Da bat PUA Protection"
                         } else {
-                            throw "Windows Defender chưa chạy hoặc không khả dụng"
+                            throw "Windows Defender chua chay hoac khong kha dung"
                         }
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [CAUTION] Loi PUA: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi PUA: $($_.Exception.Message)"
+                        Write-CleanupLog "Loi PUA: $($_.Exception.Message)"
                     }
                 }
                 "DisableMicrophone"{
@@ -390,10 +390,10 @@ $CoreLogic = {
                         }
                         Set-ItemProperty -Path $regPath -Name "Value" -Value "Deny" -ErrorAction Stop
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da tat Microphone`n")
-                        Write-CleanupLog "Đã tắt Microphone"
+                        Write-CleanupLog "Da tat Microphone"
                     } catch {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [CAUTION] Loi Microphone: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi Microphone: $($_.Exception.Message)"
+                        Write-CleanupLog "Loi Microphone: $($_.Exception.Message)"
                     }
                 }
                 "DisableAdvertisingID"{
@@ -499,17 +499,17 @@ $CoreLogic = {
             }
             $logBox.AppendText("=> [OK]`n")
             $logBox.ScrollToCaret()
-            Write-CleanupLog "Hoàn thành: $($taskList[$taskKey])"
+            Write-CleanupLog "Hoan thanh: $($taskList[$taskKey])"
         }catch{
             $logBox.AppendText("=> [SKIP/ERROR] $($_.Exception.Message)`n")
             $logBox.ScrollToCaret()
-            Write-CleanupLog "Lỗi: $($taskList[$taskKey]) - $($_.Exception.Message)"
+            Write-CleanupLog "Loi: $($taskList[$taskKey]) - $($_.Exception.Message)"
         }
     }
     $form.Text = "System Maintenance Tool v11.0 (High Performance)"
     $logBox.AppendText("=== [OK] HOAN TAT ===`n")
     $logBox.ScrollToCaret()
-    Write-CleanupLog "Hoàn tất cleanup"
+    Write-CleanupLog "Hoan tat cleanup"
     [System.Windows.Forms.MessageBox]::Show("Da hoan thanh tac vu!", "Thong bao")
     $btnRun.Enabled=$true
 }
@@ -536,7 +536,7 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
         
         # FIX: Gan su kien Click cho nut chay nhanh
 		$btnQuick.Add_Click({
-			# ✅ Ngăn click nhiều lần
+			# Ngan click nhieu lan
 			if (-not $this.Enabled) { return }
 			$this.Enabled = $false
     
@@ -549,9 +549,9 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
     
 			& $CoreLogic $currentTasks
     
-			# ✅ Bật lại nút sau khi chạy xong
+			# Bat lai nut sau khi chay xong
 			$this.Enabled = $true
-		}. GetNewClosure())  # ✅ QUAN TRỌNG: Tránh scope leak
+		}. GetNewClosure())  # QUAN TRONG: Tranh scope leak
         
         $tab.Controls.Add($btnQuick)
     }
@@ -675,10 +675,10 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                     $proc = Start-Process reg -ArgumentList "export HKCU `"$backupPath`"" -Wait -PassThru -NoNewWindow
                     if ($proc.ExitCode -eq 0 -and (Test-Path $backupPath)) {
                         [System.Windows.Forms.MessageBox]::Show("[OK] Backup thanh cong!`n`nFile: $backupPath", "Thanh cong", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-                        Write-CleanupLog "Registry backup thành công: $backupPath"
+                        Write-CleanupLog "Registry backup thanh cong: $backupPath"
                     } else {
                         [System.Windows.Forms.MessageBox]::Show("[ERROR] Backup that bai!`n`nMa loi: $($proc.ExitCode)", "Loi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-                        Write-CleanupLog "Registry backup thất bại"
+                        Write-CleanupLog "Registry backup that bai"
                     }
                 } catch {
                     [System.Windows.Forms.MessageBox]::Show("[ERROR] Loi: $($_.Exception.Message)", "Loi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)

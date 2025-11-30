@@ -104,7 +104,7 @@ $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox = $false
 try { $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon("$env:windir\system32\cleanmgr.exe") } catch {}
 
-$tooltip = New-Object System.Windows.Forms.ToolTip; $tooltip.AutoPopDelay = 30000; $tooltip.InitialDelay = 500; $tooltip.ReshowDelay = 200; $tooltip.IsBalloon = $true; $tooltip.ToolTipIcon = "Info"; $tooltip.ToolTipTitle = "Chi tiết"
+$tooltip = New-Object System.Windows.Forms.ToolTip; $tooltip.AutoPopDelay = 30000; $tooltip.InitialDelay = 500; $tooltip.ReshowDelay = 200; $tooltip.IsBalloon = $true; $tooltip.ToolTipIcon = "Info"; $tooltip.ToolTipTitle = "Chi tiet"
 
 # --- 3. HEADER ---
 $headerPanel = New-Object System.Windows.Forms.Panel
@@ -118,7 +118,7 @@ $lblHead.Location = New-Object System.Drawing.Point(20, 10); $lblHead.AutoSize =
 $headerPanel.Controls.Add($lblHead)
 
 $lblSub = New-Object System.Windows.Forms.Label
-$lblSub.Text = "Phiên bản v11.0 - Fix lỗi Nút chạy nhanh & Chống treo máy & Lỗi Font"
+$lblSub.Text = "Phien ban v11.0 - Fix loi Nut chay nhanh & Chong treo may & Loi Font"
 $lblSub.Font = $Font_Normal; $lblSub.ForeColor = [System.Drawing.Color]::WhiteSmoke
 $lblSub.Location = New-Object System.Drawing.Point(25, 50); $lblSub.AutoSize = $true
 $headerPanel.Controls.Add($lblSub)
@@ -130,13 +130,13 @@ $tabControl.Location = New-Object System.Drawing.Point(10, 100)
 $tabControl.Size = New-Object System.Drawing.Size(965, 410)
 $tabControl.Font = $Font_Normal
 
-$tabBasic = New-Object System.Windows.Forms.TabPage "Dọn Dẹp Cơ Bản"
-$tabAdv = New-Object System.Windows.Forms.TabPage "Nâng Cao"
-$tabOpt = New-Object System.Windows.Forms.TabPage "Tối Ưu"
-$tabSec = New-Object System.Windows.Forms.TabPage "Bảo Mật"
-$tabPriv = New-Object System.Windows.Forms.TabPage "Riêng Tư"
-$tabWinget = New-Object System.Windows.Forms.TabPage "Cập Nhật App"
-$tabUtils = New-Object System.Windows.Forms.TabPage "Tiện Ích"
+$tabBasic = New-Object System.Windows.Forms.TabPage "Don Dep Co Ban"
+$tabAdv = New-Object System.Windows.Forms.TabPage "Nang Cao"
+$tabOpt = New-Object System.Windows.Forms.TabPage "Toi Uu"
+$tabSec = New-Object System.Windows.Forms.TabPage "Bao Mat"
+$tabPriv = New-Object System.Windows.Forms.TabPage "Rieng Tu"
+$tabWinget = New-Object System.Windows.Forms.TabPage "Cap Nhat App"
+$tabUtils = New-Object System.Windows.Forms.TabPage "Tien Ich"
 
 $tabs = @($tabBasic, $tabAdv, $tabOpt, $tabSec, $tabPriv, $tabWinget, $tabUtils)
 foreach ($t in $tabs) { $t.BackColor = $Color_Panel; $t.UseVisualStyleBackColor = $true; $t.AutoScroll = $true; $tabControl.Controls.Add($t) }
@@ -193,14 +193,14 @@ $CoreLogic = {
     foreach($taskKey in $taskList.Keys){
         $taskIndex++
         $prog.Value = [int](($taskIndex / $totalTasks) * 100)
-        $form.Text = "Cleanup Tool - Đang xử lý: $taskIndex/$totalTasks"
+        $form.Text = "Cleanup Tool - Dang xu ly: $taskIndex/$totalTasks"
         
         # Cap nhat giao dien ngay lap tuc
         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Dang xu ly: $($taskList[$taskKey])...`n")
         $logBox.ScrollToCaret()
         $form.Refresh()
         [System.Windows.Forms.Application]::DoEvents()
-        Write-CleanupLog "Đang xử lý: $($taskList[$taskKey])"
+        Write-CleanupLog "Dang xu ly: $($taskList[$taskKey])"
         
         try{
             switch($taskKey){
@@ -520,18 +520,18 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
     $dict = @{}
     
     $btnAll = New-Object System.Windows.Forms.Button
-    $btnAll.Text = "Chọn Tất Cả"; $btnAll.Location = New-Object System.Drawing.Point(30, $y); $btnAll.Size = New-Object System.Drawing.Size(120, 35)
+    $btnAll.Text = "Chon Tat Ca"; $btnAll.Location = New-Object System.Drawing.Point(30, $y); $btnAll.Size = New-Object System.Drawing.Size(120, 35)
     $btnAll.Add_Click({ $this.Parent.Controls | Where {$_.GetType() -eq [System.Windows.Forms.CheckBox]} | ForEach { $_.Checked = $true } })
     $tab.Controls.Add($btnAll)
     
     $btnNone = New-Object System.Windows.Forms.Button
-    $btnNone.Text = "Bỏ Chọn"; $btnNone.Location = New-Object System.Drawing.Point(160, $y); $btnNone.Size = New-Object System.Drawing.Size(120, 35)
+    $btnNone.Text = "Bo Chon"; $btnNone.Location = New-Object System.Drawing.Point(160, $y); $btnNone.Size = New-Object System.Drawing.Size(120, 35)
     $btnNone.Add_Click({ $this.Parent.Controls | Where {$_.GetType() -eq [System.Windows.Forms.CheckBox]} | ForEach { $_.Checked = $false } })
     $tab.Controls.Add($btnNone)
 
     if ($hasQuickAction) {
         $btnQuick = New-Object System.Windows.Forms.Button
-        $btnQuick.Text = "CHẠY NHANH TAB NÀY"; $btnQuick.Location = New-Object System.Drawing.Point(700, $y); $btnQuick.Size = New-Object System.Drawing.Size(200, 35)
+        $btnQuick.Text = "CHAY NHANH TAB NAY"; $btnQuick.Location = New-Object System.Drawing.Point(700, $y); $btnQuick.Size = New-Object System.Drawing.Size(200, 35)
         $btnQuick.BackColor = $Color_Green; $btnQuick.ForeColor = [System.Drawing.Color]::White; $btnQuick.FlatStyle = "Flat"
         
         # FIX: Gan su kien Click cho nut chay nhanh
@@ -579,63 +579,63 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
 
 # --- 7. NOI DUNG (GIU NGUYEN NHU CU) ---
 $chkBasic = Add-TaskItem $tabBasic @(
-    @{T="Dọn thư mục Temp"; Tag="TempFiles"; D="Xóa các file rác (.tmp, .log) do phần mềm tạo ra khi chạy."},
-    @{T="Dọn Thùng rác"; Tag="RecycleBin"; D="Làm sạch hoàn toàn các file đang nằm trong Thùng rác."},
-    @{T="Xóa cache trình duyệt"; Tag="BrowserCache"; D="Xóa bộ nhớ đệm Chrome/Edge/Firefox (Giữ Pass)."},
-    @{T="Dọn Windows Update Cache"; Tag="WinUpdateCache"; D="Xóa các file Update cũ (Giải phóng 5-10GB)."},
-    @{T="Xóa file Prefetch"; Tag="Prefetch"; D="Xóa bộ đệm khởi động cũ."},
-    @{T="Xóa bản tải xuống cũ"; Tag="OldDownloads"; D="Xóa file trong Downloads cũ hơn 30 ngày."},
-    @{T="Dọn Event Logs"; Tag="EventLogs"; D="Xóa nhật ký lỗi hệ thống."},
-    @{T="Dọn thumbnail cache"; Tag="ThumbnailCache"; D="Sửa lỗi icon bị trắng."}
+    @{T="Don thu muc Temp"; Tag="TempFiles"; D="Xoa cac file rac (.tmp, .log) do phan mem tao ra khi chay."},
+    @{T="Don Thung rac"; Tag="RecycleBin"; D="Lam sach hoan toan cac file dang nam trong Thung rac."},
+    @{T="Xoa cache trinh duyet"; Tag="BrowserCache"; D="Xoa bo nho dem Chrome/Edge/Firefox (Giu Pass)."},
+    @{T="Don Windows Update Cache"; Tag="WinUpdateCache"; D="Xoa cac file Update cu (Giai phong 5-10GB)."},
+    @{T="Xoa file Prefetch"; Tag="Prefetch"; D="Xoa bo dem khoi dong cu."},
+    @{T="Xoa ban tai xuong cu"; Tag="OldDownloads"; D="Xoa file trong Downloads cu hon 30 ngay."},
+    @{T="Don Event Logs"; Tag="EventLogs"; D="Xoa nhat ky loi he thong."},
+    @{T="Don thumbnail cache"; Tag="ThumbnailCache"; D="Sua loi icon bi trang."}
 ) $true
 
 $chkAdv = Add-TaskItem $tabAdv @(
-    @{T="Dọn dẹp WinSxS (Sâu)"; Tag="WinSxS"; D="Phân tích sâu và xóa thành phần Win thừa (Rất lâu, Anti-Freeze ON)."},
-    @{T="Reset Microsoft Store"; Tag="StoreCache"; D="Sửa lỗi không tải được ứng dụng Store."},
-    @{T="Dọn OneDrive Cache"; Tag="OneDriveCache"; D="Xóa file log và setup tạm của OneDrive."},
-    @{T="Tắt Ngủ Đông (Hibernation)"; Tag="Hibernation"; D="Tắt ngủ đông, lấy lại dung lượng ổ C."},
-    @{T="Dọn Cache Font"; Tag="FontCache"; D="Sửa lỗi hiển thị font chữ."},
-    @{T="Nén hệ thống (CompactOS)"; Tag="CompressNTFS"; D="Nén Win, tiết kiệm 2-4GB (Lâu)."}
+    @{T="Don dep WinSxS (Sau)"; Tag="WinSxS"; D="Phan tich sau va xoa thanh phan Win thua (Rat lau, Anti-Freeze ON)."},
+    @{T="Reset Microsoft Store"; Tag="StoreCache"; D="Sua loi khong tai duoc ung dung Store."},
+    @{T="Don OneDrive Cache"; Tag="OneDriveCache"; D="Xoa file log va setup tam cua OneDrive."},
+    @{T="Tat Ngu Dong (Hibernation)"; Tag="Hibernation"; D="Tat ngu dong, lay lai dung luong o C."},
+    @{T="Don Cache Font"; Tag="FontCache"; D="Sua loi hien thi font chu."},
+    @{T="Nen he thong (CompactOS)"; Tag="CompressNTFS"; D="Nen Win, tiet kiem 2-4GB (Lau)."}
 ) $true
 
 $chkOpt = Add-TaskItem $tabOpt @(
-    @{T="Tối ưu hóa khởi động"; Tag="StartupOptimize"; D="Tắt độ trễ khởi động."},
-    @{T="Bật chế độ Hiệu suất cao"; Tag="HighPerfPlan"; D="Kích hoạt Ultimate Performance Plan."},
-    @{T="Tắt Game DVR (Tăng FPS)"; Tag="DisableGameDVR"; D="Tắt quay phim nền Xbox."},
-    @{T="Tắt Phím dính (Sticky Keys)"; Tag="DisableStickyKeys"; D="Tắt hộp thoại Shift 5 lần."},
-    @{T="Tối ưu hóa dịch vụ"; Tag="ServiceOptimize"; D="Tắt Fax, Print Spooler, Telemetry..."},
-    @{T="Tối ưu hóa Page File"; Tag="PageFileOptimize"; D="Reset bộ nhớ ảo tự động."},
-    @{T="Tối ưu hóa Hiệu ứng ảnh"; Tag="VisualPerformance"; D="Tắt hiệu ứng mờ để máy nhanh hơn."},
-    @{T="Tối ưu hóa Windows Search"; Tag="SearchOptimize"; D="Rebuild Index tìm kiếm."},
-    @{T="Tối ưu hóa Tắt máy"; Tag="ShutdownOptimize"; D="Giảm thời gian chờ ứng dụng treo."}
+    @{T="Toi uu hoa khoi dong"; Tag="StartupOptimize"; D="Tat do tre khoi dong."},
+    @{T="Bat che do Hieu suat cao"; Tag="HighPerfPlan"; D="Kich hoat Ultimate Performance Plan."},
+    @{T="Tat Game DVR (Tang FPS)"; Tag="DisableGameDVR"; D="Tat quay phim nen Xbox."},
+    @{T="Tat Phim dinh (Sticky Keys)"; Tag="DisableStickyKeys"; D="Tat hop thoai Shift 5 lan."},
+    @{T="Toi uu hoa dich vu"; Tag="ServiceOptimize"; D="Tat Fax, Print Spooler, Telemetry..."},
+    @{T="Toi uu hoa Page File"; Tag="PageFileOptimize"; D="Reset bo nho ao tu dong."},
+    @{T="Toi uu hoa Hieu ung anh"; Tag="VisualPerformance"; D="Tat hieu ung mo de may nhanh hon."},
+    @{T="Toi uu hoa Windows Search"; Tag="SearchOptimize"; D="Rebuild Index tim kiem."},
+    @{T="Toi uu hoa Tat may"; Tag="ShutdownOptimize"; D="Giam thoi gian cho ung dung treo."}
 ) $true
 
 $chkSec = Add-TaskItem $tabSec @(
-    @{T="Quét Virus Nhanh"; Tag="BasicMalware"; D="Windows Defender Quick Scan."},
-    @{T="Hiện đuôi file (Extension)"; Tag="ShowExtensions"; D="Hiển thị .exe, .pdf tránh virus giả mạo."},
-    @{T="Tắt Hỗ trợ từ xa"; Tag="DisableRemoteAssist"; D="Chặn Remote Assistance."},
-    @{T="Tắt giao thức SMBv1"; Tag="DisableSMB1"; D="Chặn lỗ hổng WannaCry."},
-    @{T="Xóa Lịch sử Web"; Tag="BrowserHistory"; D="Xóa lịch sử web đã truy cập."},
-    @{T="Kiểm tra Cập nhật Win"; Tag="WindowsUpdate"; D="Mở trình cập nhật Windows."},
-    @{T="Kiểm tra Tường lửa"; Tag="EnsureFirewallEnabled"; D="Bật lại Windows Firewall."},
-    @{T="Bật Chống phần mềm rác"; Tag="EnablePUAProtection"; D="Chặn ứng dụng tiềm ẩn nguy hiểm (PUA)."}
+    @{T="Quet Virus Nhanh"; Tag="BasicMalware"; D="Windows Defender Quick Scan."},
+    @{T="Hien duoi file (Extension)"; Tag="ShowExtensions"; D="Hien thi .exe, .pdf tranh virus gia mao."},
+    @{T="Tat Ho tro tu xa"; Tag="DisableRemoteAssist"; D="Chan Remote Assistance."},
+    @{T="Tat giao thuc SMBv1"; Tag="DisableSMB1"; D="Chan lo hong WannaCry."},
+    @{T="Xoa Lich su Web"; Tag="BrowserHistory"; D="Xoa lich su web da truy cap."},
+    @{T="Kiem tra Cap nhat Win"; Tag="WindowsUpdate"; D="Mo trinh cap nhat Windows."},
+    @{T="Kiem tra Tuong lua"; Tag="EnsureFirewallEnabled"; D="Bat lai Windows Firewall."},
+    @{T="Bat Chong phan mem rac"; Tag="EnablePUAProtection"; D="Chan ung dung tiem an nguy hiem (PUA)."}
 ) $true
 
 $chkPriv = Add-TaskItem $tabPriv @(
-    @{T="Tắt Micro (Toàn hệ thống)"; Tag="DisableMicrophone"; D="Vô hiệu hóa Driver Micro."},
-    @{T="Tắt Camera (Toàn hệ thống)"; Tag="DisableCamera"; D="Vô hiệu hóa Driver Webcam."},
-    @{T="Tắt Cortana & Copilot"; Tag="DisableCortana"; D="Tắt trợ lý ảo AI."},
-    @{T="Tắt Gợi ý Start Menu"; Tag="DisableStartSugg"; D="Tắt quảng cáo trong Start Menu."},
-    @{T="Tắt Thông báo Feedback"; Tag="DisableFeedback"; D="Chặn cửa sổ hỏi ý kiến người dùng."},
-    @{T="Tắt ID Quảng cáo"; Tag="DisableAdvertisingID"; D="Ngăn theo dõi quảng cáo."},
-    @{T="Tắt Telemetry (Theo dõi)"; Tag="DisableTelemetryServices"; D="Chặn gửi dữ liệu chẩn đoán."},
-    @{T="Xóa Lịch sử Hoạt động"; Tag="ClearActivityHistory"; D="Xóa Timeline hoạt động."},
-    @{T="Tắt Theo dõi Vị trí"; Tag="DisableLocationTracking"; D="Vô hiệu hóa GPS."}
+    @{T="Tat Micro (Toan he thong)"; Tag="DisableMicrophone"; D="Vo hieu hoa Driver Micro."},
+    @{T="Tat Camera (Toan he thong)"; Tag="DisableCamera"; D="Vo hieu hoa Driver Webcam."},
+    @{T="Tat Cortana & Copilot"; Tag="DisableCortana"; D="Tat tro ly ao AI."},
+    @{T="Tat Goi y Start Menu"; Tag="DisableStartSugg"; D="Tat quang cao trong Start Menu."},
+    @{T="Tat Thong bao Feedback"; Tag="DisableFeedback"; D="Chan cua so hoi y kien nguoi dung."},
+    @{T="Tat ID Quang cao"; Tag="DisableAdvertisingID"; D="Ngan theo doi quang cao."},
+    @{T="Tat Telemetry (Theo doi)"; Tag="DisableTelemetryServices"; D="Chan gui du lieu chan doan."},
+    @{T="Xoa Lich su Hoat dong"; Tag="ClearActivityHistory"; D="Xoa Timeline hoat dong."},
+    @{T="Tat Theo doi Vi tri"; Tag="DisableLocationTracking"; D="Vo hieu hoa GPS."}
 ) $true
 
 # Winget & Utilities (Giu nguyen)
-$lblW = New-Object System.Windows.Forms.Label; $lblW.Text = "CÔNG CỤ CẬP NHẬT PHẦN MỀM TỰ ĐỘNG (WINGET)"; $lblW.Font = $Font_Title; $lblW.AutoSize = $true; $lblW.Location = New-Object System.Drawing.Point(30, 30)
-$btnW = New-Object System.Windows.Forms.Button; $btnW.Text = "KIỂM TRA VÀ CẬP NHẬT TẤT CẢ"; $btnW.Size = New-Object System.Drawing.Size(350, 60); $btnW.Location = New-Object System.Drawing.Point(30, 80); $btnW.BackColor = $Color_Green; $btnW.ForeColor = [System.Drawing.Color]::White; $btnW.Font = $Font_Title
+$lblW = New-Object System.Windows.Forms.Label; $lblW.Text = "CONG CU CAP NHAT PHAN MEM TU DONG (WINGET)"; $lblW.Font = $Font_Title; $lblW.AutoSize = $true; $lblW.Location = New-Object System.Drawing.Point(30, 30)
+$btnW = New-Object System.Windows.Forms.Button; $btnW.Text = "KIEM TRA VA CAP NHAT TAT CA"; $btnW.Size = New-Object System.Drawing.Size(350, 60); $btnW.Location = New-Object System.Drawing.Point(30, 80); $btnW.BackColor = $Color_Green; $btnW.ForeColor = [System.Drawing.Color]::White; $btnW.Font = $Font_Title
 $btnW.Add_Click({ 
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         try {
@@ -651,7 +651,7 @@ $btnW.Add_Click({
 $tabWinget.Controls.Add($lblW); $tabWinget.Controls.Add($btnW)
 
 $col1_X = 40; $col2_X = 500; $yStart = 40; $yStep = 85
-$utils = @(@{T="Disk Cleanup"; Tag="DiskMgr"; D="Mở công cụ dọn dẹp Windows."}, @{T="Xóa Cache DNS"; Tag="FlushDnsCache"; D="Sửa lỗi mạng."}, @{T="Sức khỏe Ổ cứng"; Tag="ChkDsk"; D="Xem SMART ổ cứng."}, @{T="Quản lý Khởi động"; Tag="StartupManager"; D="Mở Task Manager."}, @{T="Backup Registry"; Tag="RegBack"; D="Sao lưu Registry."}, @{T="Phân vùng Ổ đĩa"; Tag="DiskPart"; D="Mở Disk Management."}, @{T="Reset Mạng"; Tag="ResetNetworkStack"; D="Cài lại Driver mạng."}, @{T="Sửa lỗi Win (SFC)"; Tag="FixCommonIssues"; D="Chạy SFC Scannow."})
+$utils = @(@{T="Disk Cleanup"; Tag="DiskMgr"; D="Mo cong cu don dep Windows."}, @{T="Xoa Cache DNS"; Tag="FlushDnsCache"; D="Sua loi mang."}, @{T="Suc khoe O cung"; Tag="ChkDsk"; D="Xem SMART o cung."}, @{T="Quan ly Khoi dong"; Tag="StartupManager"; D="Mo Task Manager."}, @{T="Backup Registry"; Tag="RegBack"; D="Sao luu Registry."}, @{T="Phan vung O dia"; Tag="DiskPart"; D="Mo Disk Management."}, @{T="Reset Mang"; Tag="ResetNetworkStack"; D="Cai lai Driver mang."}, @{T="Sua loi Win (SFC)"; Tag="FixCommonIssues"; D="Chay SFC Scannow."})
 for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
     $utilItem = $utils[$utilIndex]; $row = [math]::Floor($utilIndex / 2); $isCol2 = ($utilIndex % 2 -eq 1); $posX = if ($isCol2) { $col2_X } else { $col1_X }; $posY = $yStart + ($row * $yStep)
     $btnUtil = New-Object System.Windows.Forms.Button; $btnUtil.Text = $utilItem.T; $btnUtil.Location = New-Object System.Drawing.Point($posX, $posY); $btnUtil.Size = New-Object System.Drawing.Size(250, 40); $btnUtil.Tag = $utilItem.Tag; $btnUtil.FlatStyle = "Standard"; $btnUtil.BackColor = [System.Drawing.Color]::White; $btnUtil.Font = $Font_Title
@@ -703,14 +703,14 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
 $infoPanel = New-Object System.Windows.Forms.Panel; $infoPanel.Size = New-Object System.Drawing.Size(965, 80); $infoPanel.Location = New-Object System.Drawing.Point(10, 520); $infoPanel.BackColor = [System.Drawing.Color]::WhiteSmoke; $infoPanel.BorderStyle = "FixedSingle"
 $os = (Get-CimInstance Win32_OperatingSystem).Caption; $cpu = (Get-CimInstance Win32_Processor).Name; $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
 $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" | Select @{N='Free';E={[math]::Round($_.FreeSpace/1GB,2)}}, @{N='Total';E={[math]::Round($_.Size/1GB,2)}}
-$lblLeft = New-Object System.Windows.Forms.Label; $lblLeft.Text = "HỆ ĐIỀU HÀNH: $os`nCPU: $cpu`nRAM: $ram GB"; $lblLeft.Location = New-Object System.Drawing.Point(10, 10); $lblLeft.Size = New-Object System.Drawing.Size(450, 60); $lblLeft.Font = $Font_Normal; $infoPanel.Controls.Add($lblLeft)
-$lblRight = New-Object System.Windows.Forms.Label; $lblRight.Text = "Ổ C (HỆ THỐNG):`nTrống: $($disk.Free) GB / Tổng: $($disk.Total) GB"; $lblRight.Location = New-Object System.Drawing.Point(500, 10); $lblRight.Size = New-Object System.Drawing.Size(450, 60); $lblRight.Font = $Font_Title; $lblRight.TextAlign = "TopRight"; $infoPanel.Controls.Add($lblRight)
+$lblLeft = New-Object System.Windows.Forms.Label; $lblLeft.Text = "HE DIEU HANH: $os`nCPU: $cpu`nRAM: $ram GB"; $lblLeft.Location = New-Object System.Drawing.Point(10, 10); $lblLeft.Size = New-Object System.Drawing.Size(450, 60); $lblLeft.Font = $Font_Normal; $infoPanel.Controls.Add($lblLeft)
+$lblRight = New-Object System.Windows.Forms.Label; $lblRight.Text = "O C (HE THONG):`nTrong: $($disk.Free) GB / Tong: $($disk.Total) GB"; $lblRight.Location = New-Object System.Drawing.Point(500, 10); $lblRight.Size = New-Object System.Drawing.Size(450, 60); $lblRight.Font = $Font_Title; $lblRight.TextAlign = "TopRight"; $infoPanel.Controls.Add($lblRight)
 $form.Controls.Add($infoPanel)
 
 # --- FOOTER ---
 $footerPanel = New-Object System.Windows.Forms.Panel; $footerPanel.Size = New-Object System.Drawing.Size(1000, 110); $footerPanel.Location = New-Object System.Drawing.Point(0, 610); $footerPanel.BackColor = [System.Drawing.Color]::White
 $logBox = New-Object System.Windows.Forms.RichTextBox; $logBox.Location = New-Object System.Drawing.Point(15, 10); $logBox.Size = New-Object System.Drawing.Size(700, 90); $logBox.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular); $logBox.ReadOnly = $true; $logBox.BorderStyle = "FixedSingle"; $logBox.DetectUrls = $false; $footerPanel.Controls.Add($logBox)
-$btnRun = New-Object System.Windows.Forms.Button; $btnRun.Text = "BẮT ĐẦU THỰC HIỆN"; $btnRun.Location = New-Object System.Drawing.Point(730, 10); $btnRun.Size = New-Object System.Drawing.Size(240, 50); $btnRun.BackColor = $Color_Accent; $btnRun.ForeColor = [System.Drawing.Color]::White; $btnRun.Font = $Font_Title; $btnRun.FlatStyle = "Flat"; $footerPanel.Controls.Add($btnRun)
+$btnRun = New-Object System.Windows.Forms.Button; $btnRun.Text = "BAT DAU THUC HIEN"; $btnRun.Location = New-Object System.Drawing.Point(730, 10); $btnRun.Size = New-Object System.Drawing.Size(240, 50); $btnRun.BackColor = $Color_Accent; $btnRun.ForeColor = [System.Drawing.Color]::White; $btnRun.Font = $Font_Title; $btnRun.FlatStyle = "Flat"; $footerPanel.Controls.Add($btnRun)
 $prog = New-Object System.Windows.Forms.ProgressBar; $prog.Location = New-Object System.Drawing.Point(730, 70); $prog.Size = New-Object System.Drawing.Size(240, 20); $footerPanel.Controls.Add($prog)
 $form.Controls.Add($footerPanel)
 

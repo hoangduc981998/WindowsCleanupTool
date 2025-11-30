@@ -174,7 +174,7 @@ $CoreLogic = {
     $btnRun.Enabled = $false
     $prog.Value = 0
     
-    if($taskList.Count -eq 0){ [System.Windows.Forms.MessageBox]::Show("Chưa chọn mục nào!", "Thông báo"); $btnRun.Enabled=$true; return }
+    if($taskList.Count -eq 0){ [System.Windows.Forms.MessageBox]::Show("Chua chon muc nao!", "Thong bao"); $btnRun.Enabled=$true; return }
 
     # Show estimated disk space before cleanup
     $estimatedSpace = Get-EstimatedSpace
@@ -510,7 +510,7 @@ $CoreLogic = {
     $logBox.AppendText("=== [OK] HOAN TAT ===`n")
     $logBox.ScrollToCaret()
     Write-CleanupLog "Hoàn tất cleanup"
-    [System.Windows.Forms.MessageBox]::Show("Đã hoàn thành tác vụ!", "Thông báo")
+    [System.Windows.Forms.MessageBox]::Show("Da hoan thanh tac vu!", "Thong bao")
     $btnRun.Enabled=$true
 }
 
@@ -640,12 +640,12 @@ $btnW.Add_Click({
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         try {
             Start-Process "winget" -ArgumentList "upgrade --all --include-unknown --accept-source-agreements" -Wait
-            [System.Windows.Forms.MessageBox]::Show("Đã cập nhật xong!", "Winget", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            [System.Windows.Forms.MessageBox]::Show("Da cap nhat xong!", "Winget", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
         } catch {
-            [System.Windows.Forms.MessageBox]::Show("Lỗi khi chạy Winget: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+            [System.Windows.Forms.MessageBox]::Show("Loi khi chay Winget: $($_.Exception.Message)", "Loi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
         }
     } else {
-        [System.Windows.Forms.MessageBox]::Show("Winget chưa được cài đặt trên máy này!`n`nVui lòng cài đặt từ Microsoft Store hoặc GitHub.", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+        [System.Windows.Forms.MessageBox]::Show("Winget chua duoc cai dat tren may nay!`n`nVui long cai dat tu Microsoft Store hoac GitHub.", "Loi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
     }
 })
 $tabWinget.Controls.Add($lblW); $tabWinget.Controls.Add($btnW)

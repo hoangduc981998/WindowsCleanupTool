@@ -1112,7 +1112,7 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
         $tooltip.SetToolTip($chk, $i.D)
         
         $lbl = New-Object System.Windows.Forms.Label
-        $lbl.Text = $i.D; $lbl.Location = New-Object System.Drawing.Point(360, $y+3); $lbl.Size = New-Object System.Drawing.Size(580, 25)
+        $lbl.Text = $i.D; $lbl.Location = New-Object System.Drawing.Point 360, ($y+3); $lbl.Size = New-Object System.Drawing.Size(580, 25)
         $lbl.ForeColor = $Color_Desc; $lbl.Font = $Font_Desc
         $tooltip.SetToolTip($lbl, $i.D)
 
@@ -1201,7 +1201,7 @@ $utils = @(@{T="Disk Cleanup"; Tag="DiskMgr"; D="Mở công cụ dọn dẹp Win
 for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
     $utilItem = $utils[$utilIndex]; $row = [math]::Floor($utilIndex / 2); $isCol2 = ($utilIndex % 2 -eq 1); $posX = if ($isCol2) { $col2_X } else { $col1_X }; $posY = $yStart + ($row * $yStep)
     $btnUtil = New-Object System.Windows.Forms.Button; $btnUtil.Text = $utilItem.T; $btnUtil.Location = New-Object System.Drawing.Point($posX, $posY); $btnUtil.Size = New-Object System.Drawing.Size(250, 40); $btnUtil.Tag = $utilItem.Tag; $btnUtil.FlatStyle = "Standard"; $btnUtil.BackColor = [System.Drawing.Color]::White; $btnUtil.Font = $Font_Title
-    $lblUtil = New-Object System.Windows.Forms.Label; $lblUtil.Text = $utilItem.D; $lblUtil.Location = New-Object System.Drawing.Point($posX, $posY+42); $lblUtil.AutoSize = $true; $lblUtil.ForeColor = $Color_Desc; $lblUtil.Font = $Font_Desc
+    $lblUtil = New-Object System.Windows.Forms.Label; $lblUtil.Text = $utilItem.D; $lblUtil.Location = New-Object System.Drawing.Point $posX, ($posY+42); $lblUtil.AutoSize = $true; $lblUtil.ForeColor = $Color_Desc; $lblUtil.Font = $Font_Desc
     $tabUtils.Controls.Add($btnUtil); $tabUtils.Controls.Add($lblUtil)
     $btnUtil.Add_Click({ 
         $utilTag = $this.Tag
@@ -1230,7 +1230,59 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                     [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                 }
             }
-            "ChkDsk" { Get-PhysicalDisk | Select FriendlyName,HealthStatus | Out-GridView -Title "Sức khỏe ổ cứng" }
+            "ChkDsk" { 
+                try {
+                    # Detect if running in Sandbox
+                    $isSandbox = $env:USERNAME -eq "WDAGUtilityAccount"
+                    
+                    if ($isSandbox) {
+                        [System.Windows.Forms.MessageBox]::Show(
+                            "Bạn đang chạy trong Windows Sandbox - không có ổ cứng vật lý.  `n`nChức năng này chỉ hoạt động trên máy thật.", 
+                            "Windows Sandbox", 
+                            [System.Windows.Forms.MessageBoxButtons]::OK, 
+                            [System.Windows.Forms.MessageBoxIcon]::Information
+                        )
+                        Write-CleanupLog "Bỏ qua ChkDsk - đang chạy trong Sandbox"
+                    } else {
+                        $disks = Get-PhysicalDisk -ErrorAction Stop | Select-Object FriendlyName, HealthStatus, Size, MediaType
+                        
+                        if ($disks) {
+                            $output = "=== SỨC KHỎE Ổ CỨNG ===`n`n"
+                            foreach ($disk in $disks) {
+                                $sizeGB = [math]::Round($disk.Size / 1GB, 2)
+                                $output += "📀 $($disk.FriendlyName)`n"
+                                $output += "   Trạng thái: $($disk. HealthStatus)`n"
+                                $output += "   Dung lượng: $sizeGB GB`n"
+                                $output += "   Loại: $($disk.MediaType)`n`n"
+                            }
+                            
+                            [System.Windows.Forms.MessageBox]::Show(
+                                $output, 
+                                "Sức khỏe ổ cứng", 
+                                [System.Windows.Forms.MessageBoxButtons]::OK, 
+                                [System.Windows.Forms.MessageBoxIcon]::Information
+                            )
+                            Write-CleanupLog "Đã kiểm tra $($disks.Count) ổ cứng"
+                        } else {
+                            [System.Windows.Forms.MessageBox]::Show(
+                                "Không tìm thấy ổ cứng vật lý trên hệ thống này.", 
+                                "Thông báo", 
+                                [System.Windows.Forms.MessageBoxButtons]::OK, 
+                                [System.Windows.Forms.MessageBoxIcon]::Warning
+                            )
+                            Write-CleanupLog "Không tìm thấy Physical Disk"
+                        }
+                    }
+                } catch {
+                    [System.Windows.Forms.MessageBox]::Show(
+                        "Không thể lấy thông tin ổ cứng. `n`nLỗi: $($_.Exception.Message)`n`nĐảm bảo bạn đang chạy với quyền Administrator.", 
+                        "Lỗi", 
+                        [System.Windows.Forms.MessageBoxButtons]::OK, 
+                        [System.Windows.Forms.MessageBoxIcon]::Error
+                    )
+                    Write-CleanupLog "Lỗi ChkDsk: $($_.Exception.Message)"
+                }
+            }
             "ResetNetworkStack" { 
                 $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc muốn reset cấu hình mạng?`n`nSau khi hoàn tất cần restart máy.", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
                 if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {

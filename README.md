@@ -13,7 +13,7 @@
 
 [🚀 Bắt Đầu Nhanh](#-bắt-đầu-nhanh) • [✨ Tính Năng](#-tính-năng) • [📥 Tải Về](#-tải-về--cài-đặt) • [📖 Tài Liệu](#-tài-liệu) • [🤝 Đóng Góp](#-đóng-góp)
 
-![Screenshot](https://via.placeholder.com/800x450/0078D6/FFFFFF?text=WindowsCleanupTool+v2.0)
+![Screenshot](<img width="985" height="827" alt="Image" src="https://github.com/user-attachments/assets/ffae56f1-1f34-44f0-81d6-34b30206afaa" />)
 
 </div>
 

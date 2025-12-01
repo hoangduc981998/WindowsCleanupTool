@@ -4,10 +4,12 @@
 
 **Công Cụ Dọn Dẹp & Tối Ưu Windows Chuyên Nghiệp**
 
-[![Giấy phép: MIT](https://img.shields. io/badge/Gi%E1%BA%A5y%20ph%C3%A9p-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
-[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6.svg)](https://www.microsoft.com/windows)
-[![Phiên bản](https://img.shields.io/badge/phi%C3%AAn%20b%E1%BA%A3n-2.0. 0-green.svg)](https://github.com/hoangduc981998/WindowsCleanupTool/releases)
+<p align="center">
+  <img src="https://img. shields.io/badge/License-MIT-yellow? style=for-the-badge" alt="MIT License">
+  <img src="https://img.shields.io/badge/PowerShell-5.1+-blue?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell">
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields. io/badge/Version-2.0.0-green?style=for-the-badge" alt="Version">
+</p>
 
 [🚀 Bắt Đầu Nhanh](#-bắt-đầu-nhanh) • [✨ Tính Năng](#-tính-năng) • [📥 Tải Về](#-tải-về--cài-đặt) • [📖 Tài Liệu](#-tài-liệu) • [🤝 Đóng Góp](#-đóng-góp)
 
@@ -533,11 +535,12 @@ Nếu bạn thấy dự án này hữu ích, hãy cho một ⭐ trên GitHub nh�
 
 ## 📊 Thống Kê Dự Án
 
-![Kích thước repo](https://img.shields.io/github/repo-size/hoangduc981998/WindowsCleanupTool)
-![Kích thước code](https://img.shields.io/github/languages/code-size/hoangduc981998/WindowsCleanupTool)
-![Số dòng code](https://img. shields.io/tokei/lines/github/hoangduc981998/WindowsCleanupTool)
-![Hoạt động commit](https://img.shields.io/github/commit-activity/m/hoangduc981998/WindowsCleanupTool)
-![Commit gần nhất](https://img. shields.io/github/last-commit/hoangduc981998/WindowsCleanupTool)
+<p align="center">
+  <img src="https://img. shields.io/github/repo-size/hoangduc981998/WindowsCleanupTool? style=flat-square&label=Kích%20thước%20repo" alt="Repo size">
+  <img src="https://img.shields.io/github/languages/code-size/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Kích%20thước%20code" alt="Code size">
+  <img src="https://img.shields.io/github/commit-activity/m/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Commit%20mỗi%20tháng" alt="Commit activity">
+  <img src="https://img.shields.io/github/last-commit/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Commit%20gần%20nhất" alt="Last commit">
+</p>
 
 ---
 

@@ -5,10 +5,10 @@
 **Công Cụ Dọn Dẹp & Tối Ưu Windows Chuyên Nghiệp**
 
 <p align="center">
-  <img src="https://img. shields.io/badge/License-MIT-yellow? style=for-the-badge" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-MIT-yellow? style=for-the-badge" alt="MIT License">
   <img src="https://img.shields.io/badge/PowerShell-5.1+-blue?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields. io/badge/Version-2.0.0-green?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-2.0.0-green?style=for-the-badge" alt="Version">
 </p>
 
 [🚀 Bắt Đầu Nhanh](#-bắt-đầu-nhanh) • [✨ Tính Năng](#-tính-năng) • [📥 Tải Về](#-tải-về--cài-đặt) • [📖 Tài Liệu](#-tài-liệu) • [🤝 Đóng Góp](#-đóng-góp)
@@ -159,7 +159,7 @@ cd WindowsCleanupTool
 
 ```powershell
 # Tải và chạy trong một lệnh
-iex ((New-Object Net.WebClient). DownloadString('https://raw. githubusercontent.com/hoangduc981998/WindowsCleanupTool/main/CleanUpTool.ps1'))
+iex ((New-Object Net.WebClient). DownloadString('https://raw.githubusercontent.com/hoangduc981998/WindowsCleanupTool/main/CleanUpTool.ps1'))
 ```
 
 ---
@@ -527,7 +527,7 @@ Nếu bạn thấy dự án này hữu ích, hãy cho một ⭐ trên GitHub nh�
 
 ## 🙏 Lời Cảm Ơn
 
-- Lấy cảm hứng từ [CCleaner](https://www. ccleaner.com/), [BleachBit](https://www.bleachbit.org/), và [Chris Titus Tech's Windows Utility](https://github.com/ChrisTitusTech/winutil)
+- Lấy cảm hứng từ [CCleaner](https://www.ccleaner.com/), [BleachBit](https://www.bleachbit.org/), và [Chris Titus Tech's Windows Utility](https://github.com/ChrisTitusTech/winutil)
 - Cảm ơn tất cả [contributors](https://github.com/hoangduc981998/WindowsCleanupTool/graphs/contributors)
 - Cộng đồng PowerShell vì các best practices và code reviews
 
@@ -536,7 +536,7 @@ Nếu bạn thấy dự án này hữu ích, hãy cho một ⭐ trên GitHub nh�
 ## 📊 Thống Kê Dự Án
 
 <p align="center">
-  <img src="https://img. shields.io/github/repo-size/hoangduc981998/WindowsCleanupTool? style=flat-square&label=Kích%20thước%20repo" alt="Repo size">
+  <img src="https://img.shields.io/github/repo-size/hoangduc981998/WindowsCleanupTool? style=flat-square&label=Kích%20thước%20repo" alt="Repo size">
   <img src="https://img.shields.io/github/languages/code-size/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Kích%20thước%20code" alt="Code size">
   <img src="https://img.shields.io/github/commit-activity/m/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Commit%20mỗi%20tháng" alt="Commit activity">
   <img src="https://img.shields.io/github/last-commit/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Commit%20gần%20nhất" alt="Last commit">

@@ -5,7 +5,7 @@
 **Công Cụ Dọn Dẹp & Tối Ưu Windows Chuyên Nghiệp**
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-MIT-yellow? style=for-the-badge" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="MIT License">
   <img src="https://img.shields.io/badge/PowerShell-5.1+-blue?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows">
   <img src="https://img.shields.io/badge/Version-2.0.0-green?style=for-the-badge" alt="Version">
@@ -536,7 +536,7 @@ Nếu bạn thấy dự án này hữu ích, hãy cho một ⭐ trên GitHub nh�
 ## 📊 Thống Kê Dự Án
 
 <p align="center">
-  <img src="https://img.shields.io/github/repo-size/hoangduc981998/WindowsCleanupTool? style=flat-square&label=Kích%20thước%20repo" alt="Repo size">
+  <img src="https://img.shields.io/github/repo-size/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Kích%20thước%20repo" alt="Repo size">
   <img src="https://img.shields.io/github/languages/code-size/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Kích%20thước%20code" alt="Code size">
   <img src="https://img.shields.io/github/commit-activity/m/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Commit%20mỗi%20tháng" alt="Commit activity">
   <img src="https://img.shields.io/github/last-commit/hoangduc981998/WindowsCleanupTool?style=flat-square&label=Commit%20gần%20nhất" alt="Last commit">

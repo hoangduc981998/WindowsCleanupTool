@@ -1,0 +1,55 @@
+name: PowerShell Tests
+
+on:
+  push:
+    branches: [ main, develop, feature/** ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser
+        Import-Module Pester
+    
+    - name: Run Integration Tests
+      shell: pwsh
+      run: |
+        if (Test-Path .\Tests\IntegrationTest.ps1) {
+          .\Tests\IntegrationTest.ps1
+        } else {
+          Write-Host "Integration tests not found, skipping..."
+        }
+    
+    - name: Check Plugin System
+      shell: pwsh
+      run: |
+        Write-Host "=== Checking Plugin Files ==="
+        if (Test-Path .\Plugins) {
+          Get-ChildItem .\Plugins\Plugin_*.ps1 | ForEach-Object {
+            Write-Host "✓ Found plugin: $($_.Name)" -ForegroundColor Green
+          }
+        } else {
+          Write-Host "⚠ Plugins folder not found" -ForegroundColor Yellow
+        }
+    
+    - name: Validate Plugin Template
+      shell: pwsh
+      run: |
+        if (Test-Path .\PluginTemplate.ps1) {
+          Write-Host "✓ PluginTemplate.ps1 exists" -ForegroundColor Green
+        } else {
+          Write-Host "✗ PluginTemplate.ps1 missing!" -ForegroundColor Red
+          exit 1
+        }

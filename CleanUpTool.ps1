@@ -1,9 +1,16 @@
 # --- 0. TU DONG KIEM TRA QUYEN ADMIN ---
+# Support -AutoRun parameter for scheduled cleanup
+param(
+    [switch]$AutoRun
+)
+
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $processInfo = New-Object System.Diagnostics.ProcessStartInfo
     $processInfo.FileName = "powershell.exe"
-    $processInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    # Pass through the -AutoRun parameter if present
+    $autoRunArg = if ($AutoRun) { " -AutoRun" } else { "" }
+    $processInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"$autoRunArg"
     $processInfo.Verb = "runas"
     try { [System.Diagnostics.Process]::Start($processInfo) } catch {}
     exit
@@ -484,7 +491,7 @@ function New-CleanupRestorePoint {
         # Enable System Restore if disabled
         Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
         Checkpoint-Computer -Description "Trước khi Cleanup - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
-        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da tao Restore Point`n")
+        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã Tạo Restore Point`n")
         $logBox.ScrollToCaret()
         Write-CleanupLog "Đã tạo Restore Point thành công"
         return $true
@@ -728,11 +735,50 @@ $CoreLogic = {
     $logBox.ScrollToCaret()
     Write-CleanupLog "Bắt đầu cleanup - Ước tính giải phóng: ~$estimatedSpace MB"
 
-    # Create restore point before cleanup
-    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [REFRESH] Đang tạo điểm khôi phục hệ thống...`n")
-    $logBox.ScrollToCaret()
-    [System.Windows.Forms.Application]::DoEvents()
-    New-CleanupRestorePoint -logBox $logBox
+    # Kiểm tra restore point gần nhất
+    $createRestorePoint = $true
+
+    try {
+        $wmiQuery = "SELECT * FROM SystemRestore"
+        $restorePoints = Get-CimInstance -Query $wmiQuery -Namespace root\default -ErrorAction Stop | 
+                         Sort-Object SequenceNumber -Descending
+        
+        if ($restorePoints -and $restorePoints.Count -gt 0) {
+            $lastRP = $restorePoints[0]
+            
+            if ($lastRP.CreationTime) {
+                $timeSinceLastRestore = (Get-Date) - $lastRP.CreationTime
+                $minutesAgo = [math]::Round($timeSinceLastRestore.TotalMinutes, 1)
+                
+                if ($timeSinceLastRestore.TotalMinutes -lt 30) {
+                    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Đã có restore point trong 30 phút gần đây ($minutesAgo phút trước). Bỏ qua tạo mới.`n")
+                    $logBox.ScrollToCaret()
+                    Write-CleanupLog "Bỏ qua tạo Restore Point - đã có restore point $minutesAgo phút trước"
+                    $createRestorePoint = $false
+                } else {
+                    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Restore point gần nhất: $minutesAgo phút trước. Tạo mới...`n")
+                    $logBox.ScrollToCaret()
+                }
+            } else {
+                throw "CreationTime is null"
+            }
+        } else {
+            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Chưa có restore point nào. Tạo mới... `n")
+            $logBox.ScrollToCaret()
+        }
+    } catch {
+        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Không thể kiểm tra restore point. Tạo mới để an toàn...`n")
+        $logBox.ScrollToCaret()
+        Write-CleanupLog "Lỗi kiểm tra restore point: $($_.Exception.Message)"
+        $createRestorePoint = $true
+    }
+
+    if ($createRestorePoint) {
+        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [REFRESH] Đang tạo điểm khôi phục hệ thống...`n")
+        $logBox.ScrollToCaret()
+        [System.Windows.Forms.Application]::DoEvents()
+        New-CleanupRestorePoint -logBox $logBox
+    }
 
     $taskIndex = 0
     $totalTasks = $taskList.Count
@@ -822,20 +868,26 @@ $CoreLogic = {
                 }
                 
                 # --- CAC TAC VU NANG (Dung Run-Safe de chong treo) ---
-                "WinSxS"{ 
-                    try {
-                        $proc = Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" -Wait -PassThru -NoNewWindow -ErrorAction Stop
-                        if ($proc.ExitCode -eq 0) {
-                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã dọn WinSxS`n")
-                            Write-CleanupLog "Đã dọn WinSxS"
-                        } else {
-                            throw "Exit code: $($proc.ExitCode)"
-                        }
-                    } catch {
-                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi WinSxS: $($_.Exception.Message)`n")
-                        Write-CleanupLog "Lỗi WinSxS: $($_.Exception.Message)"
-                    }
-                }
+				"WinSxS" {
+					try {
+						$proc = Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" `
+							-Wait -PassThru -NoNewWindow -ErrorAction Stop
+        
+						switch ($proc.ExitCode) {
+							0 { 
+								Write-CleanupLog "[OK] Đã dọn WinSxS" 
+							}
+							-2146498554 { # CBS_E_PENDING
+								Write-CleanupLog "[INFO] Component Store đang được sử dụng bởi Windows Update. Thử lại sau."
+							}
+							default { 
+								Write-CleanupLog "[WARN] Lỗi WinSxS: Exit code: $($proc.ExitCode)" 
+							}
+						}
+					} catch {
+						Write-CleanupLog "[ERROR] Lỗi WinSxS: $($_.Exception.Message)"
+					}
+				}
                 "StoreCache"{ 
                     try {
                         $wsreset = "$env:windir\System32\WSReset.exe"
@@ -1042,6 +1094,19 @@ $CoreLogic = {
                         $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Feedback: $($_.Exception.Message)`n")
                     }
                 }
+                "DisableCloudClipboard"{
+                    try {
+                        $regPath = "HKCU:\Software\Microsoft\Clipboard"
+                        if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+                        Set-ItemProperty $regPath -Name "EnableClipboardHistory" -Value 0 -Type DWord -Force -ErrorAction Stop
+                        Set-ItemProperty $regPath -Name "CloudClipboardEnabled" -Value 0 -Type DWord -Force -ErrorAction Stop
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã tắt Cloud Clipboard`n")
+                        Write-CleanupLog "Đã tắt Cloud Clipboard"
+                    } catch {
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi Cloud Clipboard: $($_.Exception.Message)`n")
+                        Write-CleanupLog "Lỗi Cloud Clipboard: $($_.Exception.Message)"
+                    }
+                }
             }
             $logBox.AppendText("=> [OK]`n")
             $logBox.ScrollToCaret()
@@ -1176,7 +1241,8 @@ $chkPriv = Add-TaskItem $tabPriv @(
     @{T="Tắt ID Quảng cáo"; Tag="DisableAdvertisingID"; D="Ngăn theo dõi quảng cáo."},
     @{T="Tắt Telemetry (Theo dõi)"; Tag="DisableTelemetryServices"; D="Chặn gửi dữ liệu chẩn đoán."},
     @{T="Xóa Lịch sử Hoạt động"; Tag="ClearActivityHistory"; D="Xóa Timeline hoạt động."},
-    @{T="Tắt Theo dõi Vị trí"; Tag="DisableLocationTracking"; D="Vô hiệu hóa GPS."}
+    @{T="Tắt Theo dõi Vị trí"; Tag="DisableLocationTracking"; D="Vô hiệu hóa GPS."},
+    @{T="Tắt Cloud Clipboard"; Tag="DisableCloudClipboard"; D="Ngăn đồng bộ hóa lịch sử clipboard qua cloud."}
 ) $true
 
 # Winget & Utilities (Giu nguyen)
@@ -1197,7 +1263,7 @@ $btnW.Add_Click({
 $tabWinget.Controls.Add($lblW); $tabWinget.Controls.Add($btnW)
 
 $col1_X = 40; $col2_X = 500; $yStart = 40; $yStep = 85
-$utils = @(@{T="Disk Cleanup"; Tag="DiskMgr"; D="Mở công cụ dọn dẹp Windows."}, @{T="Xóa Cache DNS"; Tag="FlushDnsCache"; D="Sửa lỗi mạng."}, @{T="Sức khỏe Ổ cứng"; Tag="ChkDsk"; D="Xem SMART ổ cứng."}, @{T="Quản lý Khởi động"; Tag="StartupManager"; D="Mở Task Manager."}, @{T="Backup Registry"; Tag="RegBack"; D="Sao lưu Registry."}, @{T="Phân vùng Ổ đĩa"; Tag="DiskPart"; D="Mở Disk Management."}, @{T="Reset Mạng"; Tag="ResetNetworkStack"; D="Cài lại Driver mạng."}, @{T="Sửa lỗi Win (SFC)"; Tag="FixCommonIssues"; D="Chạy SFC Scannow."})
+$utils = @(@{T="Disk Cleanup"; Tag="DiskMgr"; D="Mở công cụ dọn dẹp Windows."}, @{T="Xóa Cache DNS"; Tag="FlushDnsCache"; D="Xóa bộ nhớ đệm phân giải tên miền."}, @{T="Sức khỏe Ổ cứng"; Tag="ChkDsk"; D="Xem SMART ổ cứng."}, @{T="Quản lý Khởi động"; Tag="StartupManager"; D="Mở Task Manager."}, @{T="💾 Sao lưu Registry"; Tag="RegBack"; D="Sao lưu HKLM và HKCU vào Desktop."}, @{T="Phân vùng Ổ đĩa"; Tag="DiskPart"; D="Mở Disk Management."}, @{T="Reset Mạng"; Tag="ResetNetworkStack"; D="Reset Winsock và TCP/IP (cần khởi động lại)."}, @{T="Sửa lỗi Win (SFC)"; Tag="FixCommonIssues"; D="Chạy SFC Scannow."}, @{T="🔄 Khởi động lại Card mạng"; Tag="RestartActiveAdapter"; D="Tắt/bật card mạng đang hoạt động."}, @{T="⏰ Dọn dẹp tự động"; Tag="ScheduledCleanup"; D="Thiết lập lịch dọn dẹp hàng tuần."})
 for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
     $utilItem = $utils[$utilIndex]; $row = [math]::Floor($utilIndex / 2); $isCol2 = ($utilIndex % 2 -eq 1); $posX = if ($isCol2) { $col2_X } else { $col1_X }; $posY = $yStart + ($row * $yStep)
     $btnUtil = New-Object System.Windows.Forms.Button; $btnUtil.Text = $utilItem.T; $btnUtil.Location = New-Object System.Drawing.Point($posX, $posY); $btnUtil.Size = New-Object System.Drawing.Size(250, 40); $btnUtil.Tag = $utilItem.Tag; $btnUtil.FlatStyle = "Standard"; $btnUtil.BackColor = [System.Drawing.Color]::White; $btnUtil.Font = $Font_Title
@@ -1209,25 +1275,53 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
             "DiskMgr" { Start-Process cleanmgr }
             "FlushDnsCache" { 
                 try {
-                    $result = Invoke-Expression "ipconfig /flushdns"
-                    [System.Windows.Forms.MessageBox]::Show("[OK] Đã xóa DNS Cache thành công!", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                    $output = ipconfig /flushdns | Out-String
+                    Write-CleanupLog "DNS Cache: $output"
+                    [System.Windows.Forms.MessageBox]::Show("[OK] Đã xóa DNS Cache thành công!`n`n$output", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
                 } catch {
+                    Write-CleanupLog "Lỗi FlushDns: $($_.Exception.Message)"
                     [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                 }
             }
             "RegBack" { 
-                $backupPath = "$env:USERPROFILE\Desktop\RegBackup_$(Get-Date -Format 'yyyyMMdd_HHmmss').reg"
+                $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+                $backupPathHKLM = "$env:USERPROFILE\Desktop\RegBackup_${timestamp}_HKLM.reg"
+                $backupPathHKCU = "$env:USERPROFILE\Desktop\RegBackup_${timestamp}_HKCU.reg"
+                $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Đang sao lưu Registry...`n")
+                $logBox.ScrollToCaret()
+                [System.Windows.Forms.Application]::DoEvents()
                 try {
-                    $proc = Start-Process reg -ArgumentList "export HKCU `"$backupPath`"" -Wait -PassThru -NoNewWindow
-                    if ($proc.ExitCode -eq 0 -and (Test-Path $backupPath)) {
-                        [System.Windows.Forms.MessageBox]::Show("[OK] Backup thành công!`n`nFile: $backupPath", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-                        Write-CleanupLog "Registry backup thành công: $backupPath"
+                    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Đang sao lưu HKLM\SOFTWARE...`n")
+                    $logBox.ScrollToCaret()
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $proc1 = Start-Process reg -ArgumentList "export `"HKLM\SOFTWARE`" `"$backupPathHKLM`"" -Wait -PassThru -NoNewWindow
+                    
+                    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Đang sao lưu HKCU...`n")
+                    $logBox.ScrollToCaret()
+                    [System.Windows.Forms.Application]::DoEvents()
+                    $proc2 = Start-Process reg -ArgumentList "export HKCU `"$backupPathHKCU`"" -Wait -PassThru -NoNewWindow
+                    
+                    $successMsg = ""
+                    if ($proc1.ExitCode -eq 0 -and (Test-Path $backupPathHKLM)) {
+                        $successMsg += "✅ HKLM: $backupPathHKLM`n"
+                        Write-CleanupLog "Registry HKLM backup thành công: $backupPathHKLM"
+                    }
+                    if ($proc2.ExitCode -eq 0 -and (Test-Path $backupPathHKCU)) {
+                        $successMsg += "✅ HKCU: $backupPathHKCU"
+                        Write-CleanupLog "Registry HKCU backup thành công: $backupPathHKCU"
+                    }
+                    
+                    if ($successMsg) {
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Sao lưu Registry hoàn tất`n")
+                        $logBox.ScrollToCaret()
+                        [System.Windows.Forms.MessageBox]::Show("[OK] Backup thành công!`n`n$successMsg", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
                     } else {
-                        [System.Windows.Forms.MessageBox]::Show("[ERROR] Backup thất bại!`n`nMã lỗi: $($proc.ExitCode)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                        [System.Windows.Forms.MessageBox]::Show("[ERROR] Backup thất bại!", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                         Write-CleanupLog "Registry backup thất bại"
                     }
                 } catch {
                     [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    Write-CleanupLog "Lỗi Registry backup: $($_.Exception.Message)"
                 }
             }
             "ChkDsk" { 
@@ -1237,7 +1331,7 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                     
                     if ($isSandbox) {
                         [System.Windows.Forms.MessageBox]::Show(
-                            "Bạn đang chạy trong Windows Sandbox - không có ổ cứng vật lý.  `n`nChức năng này chỉ hoạt động trên máy thật.", 
+                            "Bạn đang chạy trong Windows Sandbox - không có ổ cứng vật lý.`n`nChức năng này chỉ hoạt động trên máy thật.", 
                             "Windows Sandbox", 
                             [System.Windows.Forms.MessageBoxButtons]::OK, 
                             [System.Windows.Forms.MessageBoxIcon]::Information
@@ -1251,7 +1345,7 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                             foreach ($disk in $disks) {
                                 $sizeGB = [math]::Round($disk.Size / 1GB, 2)
                                 $output += "📀 $($disk.FriendlyName)`n"
-                                $output += "   Trạng thái: $($disk. HealthStatus)`n"
+                                $output += "   Trạng thái: $($disk.HealthStatus)`n"
                                 $output += "   Dung lượng: $sizeGB GB`n"
                                 $output += "   Loại: $($disk.MediaType)`n`n"
                             }
@@ -1275,7 +1369,7 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                     }
                 } catch {
                     [System.Windows.Forms.MessageBox]::Show(
-                        "Không thể lấy thông tin ổ cứng. `n`nLỗi: $($_.Exception.Message)`n`nĐảm bảo bạn đang chạy với quyền Administrator.", 
+                        "Không thể lấy thông tin ổ cứng.`n`nLỗi: $($_.Exception.Message)`n`nĐảm bảo bạn đang chạy với quyền Administrator.", 
                         "Lỗi", 
                         [System.Windows.Forms.MessageBoxButtons]::OK, 
                         [System.Windows.Forms.MessageBoxIcon]::Error
@@ -1284,10 +1378,88 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
                 }
             }
             "ResetNetworkStack" { 
-                $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc muốn reset cấu hình mạng?`n`nSau khi hoàn tất cần restart máy.", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
+                $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc muốn reset cấu hình mạng?`n`nHành động này sẽ:`n- Reset Winsock`n- Reset TCP/IP`n`nSau khi hoàn tất CẦN KHỞI ĐỘNG LẠI máy.", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
                 if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
-                    Start-Process netsh -ArgumentList "int ip reset" -Wait
-                    [System.Windows.Forms.MessageBox]::Show("[OK] Xong! Vui lòng restart máy.", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                    try {
+                        Write-CleanupLog "Đang reset Winsock..."
+                        Start-Process netsh -ArgumentList "winsock reset" -Wait -NoNewWindow
+                        Write-CleanupLog "Đang reset TCP/IP..."
+                        Start-Process netsh -ArgumentList "int ip reset" -Wait -NoNewWindow
+                        Write-CleanupLog "Reset mạng hoàn tất - cần khởi động lại"
+                        [System.Windows.Forms.MessageBox]::Show("[OK] Đã reset cài đặt mạng!`n`nVui lòng KHỞI ĐỘNG LẠI máy tính để hoàn tất.", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                    } catch {
+                        Write-CleanupLog "Lỗi reset mạng: $($_.Exception.Message)"
+                        [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    }
+                }
+            }
+            "RestartActiveAdapter" {
+                try {
+                    # Find the active network adapter with default gateway
+                    $activeConfig = Get-NetIPConfiguration | Where-Object {$_.IPv4DefaultGateway -ne $null -or $_.IPv6DefaultGateway -ne $null} | Select-Object -First 1
+                    $activeAdapter = $null
+                    
+                    if ($activeConfig) {
+                        $activeAdapter = Get-NetAdapter | Where-Object {$_.InterfaceIndex -eq $activeConfig.InterfaceIndex} | Select-Object -First 1
+                    }
+                    
+                    # Fallback: find first Up adapter that is Ethernet or WiFi
+                    if (-not $activeAdapter) {
+                        $activeAdapter = Get-NetAdapter | Where-Object {$_.Status -eq 'Up' -and ($_.MediaType -match 'Ethernet' -or $_.MediaType -match 'Native 802.11') -and $_.InterfaceDescription -notmatch 'Loopback|Virtual|VPN|Bluetooth'} | Select-Object -First 1
+                    }
+                    
+                    if ($activeAdapter) {
+                        $adapterName = $activeAdapter.Name
+                        $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có muốn khởi động lại card mạng '$adapterName'?`n`n(Kết nối mạng sẽ tạm thời bị gián đoạn)", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+                        
+                        if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
+                            Write-CleanupLog "Đang tắt card mạng: $adapterName"
+                            Disable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
+                            Start-Sleep -Seconds 2
+                            Write-CleanupLog "Đang bật card mạng: $adapterName"
+                            Enable-NetAdapter -Name $adapterName -ErrorAction Stop
+                            Write-CleanupLog "Đã khởi động lại card mạng: $adapterName"
+                            [System.Windows.Forms.MessageBox]::Show("[OK] Đã khởi động lại card mạng '$adapterName' thành công!", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                        }
+                    } else {
+                        [System.Windows.Forms.MessageBox]::Show("Không tìm thấy card mạng đang hoạt động.", "Thông báo", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+                        Write-CleanupLog "Không tìm thấy card mạng đang hoạt động"
+                    }
+                } catch {
+                    [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    Write-CleanupLog "Lỗi khởi động lại card mạng: $($_.Exception.Message)"
+                }
+            }
+            "ScheduledCleanup" {
+                try {
+                    $taskName = "WindowsCleanupTool_Auto"
+                    $scriptPath = $PSCommandPath
+                    
+                    # Check if task already exists
+                    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                    
+                    if ($existingTask) {
+                        $updateConfirm = [System.Windows.Forms.MessageBox]::Show("Tác vụ dọn dẹp tự động '$taskName' đã tồn tại.`n`nBạn có muốn cập nhật không?", "Tác vụ đã tồn tại", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+                        if ($updateConfirm -eq [System.Windows.Forms.DialogResult]::No) {
+                            return
+                        }
+                        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+                        Write-CleanupLog "Đã xóa tác vụ cũ: $taskName"
+                    }
+                    
+                    # Create scheduled task
+                    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -AutoRun"
+                    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At "2:00AM"
+                    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+                    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+                    
+                    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Tự động chạy WindowsCleanupTool hàng tuần vào 2:00 AM Chủ Nhật" | Out-Null
+                    
+                    Write-CleanupLog "Đã tạo Scheduled Task: $taskName - chạy vào 2:00 AM mỗi Chủ Nhật"
+                    [System.Windows.Forms.MessageBox]::Show("[OK] Đã thiết lập dọn dẹp tự động!`n`nTên tác vụ: $taskName`nThời gian: 2:00 AM mỗi Chủ Nhật`nQuyền: SYSTEM", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                } catch {
+                    [System.Windows.Forms.MessageBox]::Show("[ERROR] Lỗi tạo Scheduled Task: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    Write-CleanupLog "Lỗi tạo Scheduled Task: $($_.Exception.Message)"
                 }
             }
             "StartupManager" { Start-Process taskmgr }
@@ -1736,5 +1908,75 @@ $form.Add_Shown({
     & $UpdateHealthDashboard
     & $LoadApps
 })
+
+# --- AUTORUN MODE ---
+# When running with -AutoRun parameter (from Scheduled Task), run cleanup automatically without UI
+if ($AutoRun) {
+    Write-CleanupLog "=== AUTORUN MODE - Chạy tự động từ Scheduled Task ==="
+    
+    # Select basic cleanup tasks automatically
+    $autoTasks = @{
+        "TempFiles" = "Dọn thư mục Temp"
+        "RecycleBin" = "Dọn Thùng rác"
+        "BrowserCache" = "Xóa cache trình duyệt"
+        "WinUpdateCache" = "Dọn Windows Update Cache"
+        "ThumbnailCache" = "Xóa Thumbnail cache"
+    }
+    
+    Write-CleanupLog "Đang thực hiện các tác vụ dọn dẹp cơ bản..."
+    
+    foreach ($taskKey in $autoTasks.Keys) {
+        $taskName = $autoTasks[$taskKey]
+        Write-CleanupLog "Đang xử lý: $taskName"
+        
+        try {
+            switch ($taskKey) {
+                "TempFiles" {
+                    if (Test-Path "$env:TEMP") {
+                        Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    if (Test-Path "$env:windir\Temp") {
+                        Remove-Item "$env:windir\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    Write-CleanupLog "[OK] Đã xóa Temp files"
+                }
+                "RecycleBin" {
+                    Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+                    Write-CleanupLog "[OK] Đã dọn Thùng rác"
+                }
+                "BrowserCache" {
+                    $chromeCache = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache"
+                    if (Test-Path $chromeCache) {
+                        Remove-Item "$chromeCache\*" -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    $edgeCache = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache"
+                    if (Test-Path $edgeCache) {
+                        Remove-Item "$edgeCache\*" -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    Write-CleanupLog "[OK] Đã xóa cache trình duyệt"
+                }
+                "WinUpdateCache" {
+                    Stop-Service wuauserv -ErrorAction SilentlyContinue
+                    if (Test-Path "$env:windir\SoftwareDistribution\Download") {
+                        Remove-Item "$env:windir\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    Start-Service wuauserv -ErrorAction SilentlyContinue
+                    Write-CleanupLog "[OK] Đã xóa Windows Update Cache"
+                }
+                "ThumbnailCache" {
+                    if (Test-Path "$env:LOCALAPPDATA\Microsoft\Windows\Explorer") {
+                        Remove-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache_*.db" -Force -ErrorAction SilentlyContinue
+                    }
+                    Write-CleanupLog "[OK] Đã xóa Thumbnail cache"
+                }
+            }
+        } catch {
+            Write-CleanupLog "[ERROR] Lỗi khi xử lý $taskName : $($_.Exception.Message)"
+        }
+    }
+    
+    Write-CleanupLog "=== AUTORUN HOÀN TẤT ==="
+    exit 0
+}
 
 $form.ShowDialog() | Out-Null

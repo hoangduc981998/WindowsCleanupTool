@@ -288,6 +288,65 @@ function Remove-DuplicateFiles {
         FreedMB = [math]::Round($totalFreed / 1MB, 2)
     }
 }
+# === DRIVER MANAGER HELPERS ===
+function Get-InstalledDrivers {
+    Write-CleanupLog "Đang quét drivers hệ thống..."
+    $drivers = @()
+    try {
+        $driverInfo = Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop |
+                      Where-Object { $_.DeviceName -and $_.DriverVersion } |
+                      Select-Object DeviceName, Manufacturer, DriverVersion, DriverDate, DeviceClass, Status
+
+        foreach ($d in $driverInfo) {
+            $driverDate = "N/A"
+            if ($d.DriverDate) {
+                try {
+                    # DriverDate is like 20210916000000.000000+000
+                    $dateStr = $d.DriverDate.ToString()
+                    if ($dateStr.Length -ge 8) {
+                        $y = $dateStr.Substring(0,4); $m = $dateStr.Substring(4,2); $day = $dateStr.Substring(6,2)
+                        $driverDate = "$day/$m/$y"
+                    }
+                } catch { $driverDate = "N/A" }
+            }
+
+            $drivers += [PSCustomObject]@{
+                Name         = $d.DeviceName
+                Manufacturer = if ($d.Manufacturer) { $d.Manufacturer } else { "Unknown" }
+                Version      = $d.DriverVersion
+                Date         = $driverDate
+                Status       = if ($d.Status -eq "OK") { "Hoạt động tốt" } else { $d.Status }
+                Class        = if ($d.DeviceClass) { $d.DeviceClass } else { "Other" }
+            }
+        }
+
+        Write-CleanupLog "Đã quét $($drivers.Count) drivers"
+        return $drivers | Sort-Object Name
+    } catch {
+        Write-CleanupLog "Lỗi quét drivers: $($_.Exception.Message)"
+        return @()
+    }
+}
+
+function Backup-Drivers {
+    param([string]$BackupPath)
+    Write-CleanupLog "Đang sao lưu drivers..."
+    try {
+        if (!(Test-Path $BackupPath)) { New-Item -Path $BackupPath -ItemType Directory -Force | Out-Null }
+        $proc = Start-Process dism -ArgumentList "/online /export-driver /destination:`"$BackupPath`"" -Wait -PassThru -NoNewWindow -ErrorAction Stop
+        if ($proc.ExitCode -eq 0) {
+            $driverCount = (Get-ChildItem $BackupPath -Filter "*.inf" -Recurse -ErrorAction SilentlyContinue).Count
+            Write-CleanupLog "Đã sao lưu $driverCount drivers vào: $BackupPath"
+            return $true
+        } else {
+            Write-CleanupLog "Lỗi backup drivers. Exit code: $($proc.ExitCode)"
+            return $false
+        }
+    } catch {
+        Write-CleanupLog "Lỗi backup drivers: $($_.Exception.Message)"
+        return $false
+    }
+}
 
 # --- HEALTH CHECK FUNCTIONS ---
 function Get-SystemHealth {
@@ -491,7 +550,7 @@ function New-CleanupRestorePoint {
         # Enable System Restore if disabled
         Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
         Checkpoint-Computer -Description "Trước khi Cleanup - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
-        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã Tạo Restore Point`n")
+        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Da tao Restore Point`n")
         $logBox.ScrollToCaret()
         Write-CleanupLog "Đã tạo Restore Point thành công"
         return $true
@@ -687,12 +746,43 @@ $tabSec = New-Object System.Windows.Forms.TabPage "Bảo Mật"
 $tabPriv = New-Object System.Windows.Forms.TabPage "Riêng Tư"
 $tabWinget = New-Object System.Windows.Forms.TabPage "Cập Nhật App"
 $tabUtils = New-Object System.Windows.Forms.TabPage "Tiện Ích"
+$tabDriver = New-Object System.Windows.Forms.TabPage "Driver Manager"
+$tabDriver.BackColor = $Color_Panel
+$tabDriver.UseVisualStyleBackColor = $true
+$tabDriver.AutoScroll = $true
 $tabRegistry = New-Object System.Windows.Forms.TabPage "Registry"
 $tabDuplicates = New-Object System.Windows.Forms.TabPage "File Trùng"
 $tabUninstaller = New-Object System.Windows.Forms.TabPage "Gỡ Cài Đặt"
 
-$tabs = @($tabBasic, $tabAdv, $tabOpt, $tabSec, $tabPriv, $tabWinget, $tabUtils, $tabRegistry, $tabDuplicates, $tabUninstaller)
+$tabs = @($tabBasic, $tabAdv, $tabOpt, $tabSec, $tabPriv, $tabWinget, $tabUtils, $tabDriver, $tabRegistry, $tabDuplicates, $tabUninstaller)
 foreach ($t in $tabs) { $t.BackColor = $Color_Panel; $t.UseVisualStyleBackColor = $true; $t.AutoScroll = $true; $tabControl.Controls.Add($t) }
+
+$names = ""
+if ($null -ne $tabControl -and $tabControl.TabPages.Count -gt 0) {
+    # Buộc thực thi pipeline trước rồi -join (tránh lỗi ForEachObject + -join)
+    $names = ($tabControl.TabPages | ForEach-Object { $_.Text }) -join ", "
+}
+
+# Tìm control log (hỗ trợ cả $script:logBox hoặc $logBox)
+$logControl = $null
+if (Get-Variable -Name script:logBox -ErrorAction SilentlyContinue) { $logControl = $script:logBox }
+elseif (Get-Variable -Name logBox -ErrorAction SilentlyContinue) { $logControl = $logBox }
+
+$debugLine = "[$((Get-Date).ToString('HH:mm:ss'))] [DEBUG] TabPages: $names`n"
+
+if ($logControl -ne $null) {
+    try {
+        $logControl.AppendText($debugLine)
+        $logControl.ScrollToCaret()
+    } catch {
+        # Nếu log không thể ghi, fallback ra console
+        Write-Verbose "Không thể ghi log vào RichTextBox: $($_.Exception.Message)"
+        Write-Output $debugLine
+    }
+} else {
+    # UI chưa tồn tại — ghi xuống console/verbose để không gây lỗi
+    Write-Verbose $debugLine
+}
 $form.Controls.Add($tabControl)
 
 # --- 5. CORE LOGIC (TACH RIENG DE NUT NAO CUNG GOI DUOC) ---
@@ -735,50 +825,11 @@ $CoreLogic = {
     $logBox.ScrollToCaret()
     Write-CleanupLog "Bắt đầu cleanup - Ước tính giải phóng: ~$estimatedSpace MB"
 
-    # Kiểm tra restore point gần nhất
-    $createRestorePoint = $true
-
-    try {
-        $wmiQuery = "SELECT * FROM SystemRestore"
-        $restorePoints = Get-CimInstance -Query $wmiQuery -Namespace root\default -ErrorAction Stop | 
-                         Sort-Object SequenceNumber -Descending
-        
-        if ($restorePoints -and $restorePoints.Count -gt 0) {
-            $lastRP = $restorePoints[0]
-            
-            if ($lastRP.CreationTime) {
-                $timeSinceLastRestore = (Get-Date) - $lastRP.CreationTime
-                $minutesAgo = [math]::Round($timeSinceLastRestore.TotalMinutes, 1)
-                
-                if ($timeSinceLastRestore.TotalMinutes -lt 30) {
-                    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Đã có restore point trong 30 phút gần đây ($minutesAgo phút trước). Bỏ qua tạo mới.`n")
-                    $logBox.ScrollToCaret()
-                    Write-CleanupLog "Bỏ qua tạo Restore Point - đã có restore point $minutesAgo phút trước"
-                    $createRestorePoint = $false
-                } else {
-                    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Restore point gần nhất: $minutesAgo phút trước. Tạo mới...`n")
-                    $logBox.ScrollToCaret()
-                }
-            } else {
-                throw "CreationTime is null"
-            }
-        } else {
-            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Chưa có restore point nào. Tạo mới... `n")
-            $logBox.ScrollToCaret()
-        }
-    } catch {
-        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [INFO] Không thể kiểm tra restore point. Tạo mới để an toàn...`n")
-        $logBox.ScrollToCaret()
-        Write-CleanupLog "Lỗi kiểm tra restore point: $($_.Exception.Message)"
-        $createRestorePoint = $true
-    }
-
-    if ($createRestorePoint) {
-        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [REFRESH] Đang tạo điểm khôi phục hệ thống...`n")
-        $logBox.ScrollToCaret()
-        [System.Windows.Forms.Application]::DoEvents()
-        New-CleanupRestorePoint -logBox $logBox
-    }
+    # Create restore point before cleanup
+    $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [REFRESH] Đang tạo điểm khôi phục hệ thống...`n")
+    $logBox.ScrollToCaret()
+    [System.Windows.Forms.Application]::DoEvents()
+    New-CleanupRestorePoint -logBox $logBox
 
     $taskIndex = 0
     $totalTasks = $taskList.Count
@@ -868,26 +919,20 @@ $CoreLogic = {
                 }
                 
                 # --- CAC TAC VU NANG (Dung Run-Safe de chong treo) ---
-				"WinSxS" {
-					try {
-						$proc = Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" `
-							-Wait -PassThru -NoNewWindow -ErrorAction Stop
-        
-						switch ($proc.ExitCode) {
-							0 { 
-								Write-CleanupLog "[OK] Đã dọn WinSxS" 
-							}
-							-2146498554 { # CBS_E_PENDING
-								Write-CleanupLog "[INFO] Component Store đang được sử dụng bởi Windows Update. Thử lại sau."
-							}
-							default { 
-								Write-CleanupLog "[WARN] Lỗi WinSxS: Exit code: $($proc.ExitCode)" 
-							}
-						}
-					} catch {
-						Write-CleanupLog "[ERROR] Lỗi WinSxS: $($_.Exception.Message)"
-					}
-				}
+                "WinSxS"{ 
+                    try {
+                        $proc = Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /ResetBase" -Wait -PassThru -NoNewWindow -ErrorAction Stop
+                        if ($proc.ExitCode -eq 0) {
+                            $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [OK] Đã dọn WinSxS`n")
+                            Write-CleanupLog "Đã dọn WinSxS"
+                        } else {
+                            throw "Exit code: $($proc.ExitCode)"
+                        }
+                    } catch {
+                        $logBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [WARN] Lỗi WinSxS: $($_.Exception.Message)`n")
+                        Write-CleanupLog "Lỗi WinSxS: $($_.Exception.Message)"
+                    }
+                }
                 "StoreCache"{ 
                     try {
                         $wsreset = "$env:windir\System32\WSReset.exe"
@@ -1177,7 +1222,7 @@ function Add-TaskItem($tab, $items, $hasQuickAction=$false) {
         $tooltip.SetToolTip($chk, $i.D)
         
         $lbl = New-Object System.Windows.Forms.Label
-        $lbl.Text = $i.D; $lbl.Location = New-Object System.Drawing.Point 360, ($y+3); $lbl.Size = New-Object System.Drawing.Size(580, 25)
+        $lbl.Text = $i.D; $lbl.Location = New-Object System.Drawing.Point(360, ($y + 3)); $lbl.Size = New-Object System.Drawing.Size(580, 25)
         $lbl.ForeColor = $Color_Desc; $lbl.Font = $Font_Desc
         $tooltip.SetToolTip($lbl, $i.D)
 
@@ -1248,16 +1293,134 @@ $chkPriv = Add-TaskItem $tabPriv @(
 # Winget & Utilities (Giu nguyen)
 $lblW = New-Object System.Windows.Forms.Label; $lblW.Text = "CÔNG CỤ CẬP NHẬT PHẦN MỀM TỰ ĐỘNG (WINGET)"; $lblW.Font = $Font_Title; $lblW.AutoSize = $true; $lblW.Location = New-Object System.Drawing.Point(30, 30)
 $btnW = New-Object System.Windows.Forms.Button; $btnW.Text = "KIỂM TRA VÀ CẬP NHẬT TẤT CẢ"; $btnW.Size = New-Object System.Drawing.Size(350, 60); $btnW.Location = New-Object System.Drawing.Point(30, 80); $btnW.BackColor = $Color_Green; $btnW.ForeColor = [System.Drawing.Color]::White; $btnW.Font = $Font_Title
-$btnW.Add_Click({ 
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        try {
-            Start-Process "winget" -ArgumentList "upgrade --all --include-unknown --accept-source-agreements" -Wait
-            [System.Windows.Forms.MessageBox]::Show("Đã cập nhật xong!", "Winget", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show("Lỗi khi chạy Winget: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+
+$btnW.Add_Click({
+    # --- 1. KIỂM TRA MÔI TRƯỜNG ---
+    $isSandbox = ($env:USERNAME -eq "WDAGUtilityAccount")
+    if ($isSandbox) {
+        [System.Windows.Forms.MessageBox]::Show("Winget không hoạt động trong Sandbox.", "Cảnh báo", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+        return
+    }
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        [System.Windows.Forms.MessageBox]::Show("Máy chưa cài Winget.", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        return
+    }
+
+    # --- 2. KHÓA UI & CHUẨN BỊ ---
+    $btnW.Enabled = $false
+    $oldProgStyle = $prog.Style
+    $oldProgValue = $prog.Value
+    $prog.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
+    
+    # Tạo nút Cancel (Đã fix lỗi Point ở đây)
+    if (-not $script:btnCancelWinget -or $script:btnCancelWinget.IsDisposed) {
+        $script:btnCancelWinget = New-Object System.Windows.Forms.Button
+        $script:btnCancelWinget.Text = "HỦY CẬP NHẬT"
+        $script:btnCancelWinget.Size = New-Object System.Drawing.Size(180, 32)
+        # FIX LỖI POINT: Thêm ngoặc đơn cho phép tính
+        $script:btnCancelWinget.Location = New-Object System.Drawing.Point($btnW.Location.X, ($btnW.Location.Y + 70))
+        $script:btnCancelWinget.BackColor = [System.Drawing.Color]::IndianRed
+        $script:btnCancelWinget.ForeColor = [System.Drawing.Color]::White
+        $script:btnCancelWinget.Font = $Font_Desc
+        $script:btnCancelWinget.Visible = $false
+        $footerPanel.Controls.Add($script:btnCancelWinget)
+    }
+    $script:btnCancelWinget.Visible = $true
+    $script:btnCancelWinget.Enabled = $true
+    
+    # Flag hủy bỏ
+    $script:cancelRequested = $false
+    
+    # Xóa sự kiện click cũ và gán mới
+    $script:btnCancelWinget.Remove_Click($script:btnCancelWinget_Click)
+    $script:btnCancelWinget_Click = { $script:cancelRequested = $true }
+    $script:btnCancelWinget.Add_Click($script:btnCancelWinget_Click)
+
+    # --- 3. CẤU HÌNH PROCESS (SỬ DỤNG UTF-8 ĐỂ TRÁNH LỖI KÝ TỰ) ---
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "winget"
+    # --disable-interactivity: Không hiện popup hỏi
+    # --accept-source-agreements: Tự động đồng ý điều khoản
+    $psi.Arguments = "upgrade --all --include-unknown --accept-source-agreements --disable-interactivity"
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8 # Quan trọng: Đọc đúng tiếng Việt/Ký tự lạ
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+
+    try {
+        $proc = New-Object System.Diagnostics.Process
+        $proc.StartInfo = $psi
+        $proc.Start() | Out-Null
+        
+        $logBox.AppendText("=== ĐANG CHẠY WINGET UPDATE (Vui lòng chờ)... ===`n")
+        $logBox.ScrollToCaret()
+
+        # --- 4. VÒNG LẶP XỬ LÝ (SYNCHRONOUS LOOP) - FIX CRASH ---
+        # Thay vì dùng Event, ta dùng vòng lặp để đọc stream trực tiếp trên luồng chính
+        while (-not $proc.HasExited) {
+            # Giữ cho giao diện không bị treo
+            [System.Windows.Forms.Application]::DoEvents()
+            
+            # Xử lý Hủy
+            if ($script:cancelRequested) {
+                try { $proc.Kill() } catch {}
+                $logBox.AppendText("`n[USER] Đã hủy theo yêu cầu!`n")
+                break
+            }
+
+            # Đọc Standard Output (Log thường)
+            while ($proc.StandardOutput.Peek() -gt -1) {
+                $line = $proc.StandardOutput.ReadLine()
+                if ($line) {
+                    $logBox.AppendText($line + "`n")
+                    $logBox.ScrollToCaret() # Tự cuộn xuống dưới cùng
+                }
+            }
+
+            # Đọc Standard Error (Log lỗi)
+            while ($proc.StandardError.Peek() -gt -1) {
+                $errLine = $proc.StandardError.ReadLine()
+                if ($errLine) {
+                    $logBox.AppendText("[MSG] " + $errLine + "`n")
+                    $logBox.ScrollToCaret()
+                }
+            }
+            
+            # Nghỉ 50ms để giảm tải CPU
+            Start-Sleep -Milliseconds 50
         }
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Winget chưa được cài đặt trên máy này!`n`nVui lòng cài đặt từ Microsoft Store hoặc GitHub.", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+
+        # --- 5. XỬ LÝ KẾT THÚC ---
+        # Đọc nốt những gì còn sót lại sau khi process tắt
+        $restOut = $proc.StandardOutput.ReadToEnd()
+        if ($restOut) { $logBox.AppendText($restOut + "`n") }
+        
+        $restErr = $proc.StandardError.ReadToEnd()
+        if ($restErr) { $logBox.AppendText($restErr + "`n") }
+        
+        $logBox.ScrollToCaret()
+
+        if ($proc.ExitCode -eq 0) {
+             [System.Windows.Forms.MessageBox]::Show("Cập nhật hoàn tất!", "Thành công", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+        } elseif (-not $script:cancelRequested) {
+             # Chỉ báo lỗi nếu không phải do người dùng hủy
+             $logBox.AppendText("`n[INFO] Kết thúc với mã: $($proc.ExitCode)`n")
+             # Không hiện MessageBox lỗi vì Winget hay trả về mã lạ kể cả khi chạy ổn
+        }
+
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Lỗi thực thi: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+    } finally {
+        # Dọn dẹp
+        $script:btnCancelWinget.Visible = $false
+        $script:btnCancelWinget.Enabled = $false
+        $prog.Style = $oldProgStyle
+        $prog.Value = $oldProgValue
+        $btnW.Enabled = $true
+        if ($proc) { $proc.Dispose() }
     }
 })
 $tabWinget.Controls.Add($lblW); $tabWinget.Controls.Add($btnW)
@@ -1267,7 +1430,7 @@ $utils = @(@{T="Disk Cleanup"; Tag="DiskMgr"; D="Mở công cụ dọn dẹp Win
 for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
     $utilItem = $utils[$utilIndex]; $row = [math]::Floor($utilIndex / 2); $isCol2 = ($utilIndex % 2 -eq 1); $posX = if ($isCol2) { $col2_X } else { $col1_X }; $posY = $yStart + ($row * $yStep)
     $btnUtil = New-Object System.Windows.Forms.Button; $btnUtil.Text = $utilItem.T; $btnUtil.Location = New-Object System.Drawing.Point($posX, $posY); $btnUtil.Size = New-Object System.Drawing.Size(250, 40); $btnUtil.Tag = $utilItem.Tag; $btnUtil.FlatStyle = "Standard"; $btnUtil.BackColor = [System.Drawing.Color]::White; $btnUtil.Font = $Font_Title
-    $lblUtil = New-Object System.Windows.Forms.Label; $lblUtil.Text = $utilItem.D; $lblUtil.Location = New-Object System.Drawing.Point $posX, ($posY+42); $lblUtil.AutoSize = $true; $lblUtil.ForeColor = $Color_Desc; $lblUtil.Font = $Font_Desc
+    $lblUtil = New-Object System.Windows.Forms.Label; $lblUtil.Text = $utilItem.D; $lblUtil.Location = New-Object System.Drawing.Point([int]$posX, ([int]$posY + 42)); $lblUtil.AutoSize = $true; $lblUtil.ForeColor = $Color_Desc; $lblUtil.Font = $Font_Desc
     $tabUtils.Controls.Add($btnUtil); $tabUtils.Controls.Add($lblUtil)
     $btnUtil.Add_Click({ 
         $utilTag = $this.Tag
@@ -1468,6 +1631,145 @@ for ($utilIndex=0; $utilIndex -lt $utils.Count; $utilIndex++) {
         }
     })
 }
+
+$lblDriverTitle = New-Object System.Windows.Forms.Label
+$lblDriverTitle.Text = "QUẢN LÝ TRÌNH ĐIỀU KHIỂN (DRIVERS)"
+$lblDriverTitle.Font = $Font_Title
+$lblDriverTitle.AutoSize = $true
+$lblDriverTitle.Location = New-Object System.Drawing.Point(20, 15)
+$tabDriver.Controls.Add($lblDriverTitle)
+
+$btnScanDrivers = New-Object System.Windows.Forms.Button
+$btnScanDrivers.Text = "QUÉT DRIVERS"
+$btnScanDrivers.Location = New-Object System.Drawing.Point(20, 45)
+$btnScanDrivers.Size = New-Object System.Drawing.Size(150, 40)
+$btnScanDrivers.BackColor = $Color_Accent
+$btnScanDrivers.ForeColor = [System.Drawing.Color]::White
+$btnScanDrivers.FlatStyle = "Flat"
+$btnScanDrivers.Font = $Font_Title
+$tabDriver.Controls.Add($btnScanDrivers)
+
+$btnCheckDriverUpdates = New-Object System.Windows.Forms.Button
+$btnCheckDriverUpdates.Text = "KIỂM TRA CẬP NHẬT"
+$btnCheckDriverUpdates.Location = New-Object System.Drawing.Point(180, 45)
+$btnCheckDriverUpdates.Size = New-Object System.Drawing.Size(220, 40)
+$btnCheckDriverUpdates.BackColor = $Color_Green
+$btnCheckDriverUpdates.ForeColor = [System.Drawing.Color]::White
+$btnCheckDriverUpdates.FlatStyle = "Flat"
+$btnCheckDriverUpdates.Font = $Font_Title
+$btnCheckDriverUpdates.Enabled = $false
+$tabDriver.Controls.Add($btnCheckDriverUpdates)
+
+$btnBackupDrivers = New-Object System.Windows.Forms.Button
+$btnBackupDrivers.Text = "SAO LƯU DRIVERS"
+$btnBackupDrivers.Location = New-Object System.Drawing.Point(410, 45)
+$btnBackupDrivers.Size = New-Object System.Drawing.Size(180, 40)
+$btnBackupDrivers.BackColor = [System.Drawing.Color]::DarkOrange
+$btnBackupDrivers.ForeColor = [System.Drawing.Color]::White
+$btnBackupDrivers.FlatStyle = "Flat"
+$btnBackupDrivers.Font = $Font_Title
+$tabDriver.Controls.Add($btnBackupDrivers)
+
+$lblDriverStats = New-Object System.Windows.Forms.Label
+$lblDriverStats.Text = "Tổng số drivers: 0"
+$lblDriverStats.Font = $Font_Normal
+$lblDriverStats.Location = New-Object System.Drawing.Point(610, 55)
+$lblDriverStats.Size = New-Object System.Drawing.Size(300, 25)
+$tabDriver.Controls.Add($lblDriverStats)
+
+$lstDrivers = New-Object System.Windows.Forms.ListView
+$lstDrivers.Location = New-Object System.Drawing.Point(20, 95)
+$lstDrivers.Size = New-Object System.Drawing.Size(900, 300)
+$lstDrivers.View = "Details"
+$lstDrivers.FullRowSelect = $true
+$lstDrivers.CheckBoxes = $true
+$lstDrivers.Font = $Font_Desc
+$lstDrivers.Columns.Add("Tên Driver", 300)
+$lstDrivers.Columns.Add("Nhà cung cấp", 150)
+$lstDrivers.Columns.Add("Phiên bản", 120)
+$lstDrivers.Columns.Add("Ngày", 100)
+$lstDrivers.Columns.Add("Trạng thái", 120)
+$lstDrivers.Columns.Add("Loại", 150)
+$tabDriver.Controls.Add($lstDrivers)
+
+
+$btnScanDrivers.Add_Click({
+    $this.Enabled = $false
+    $this.Text = "Đang quét..."
+    try { $lstDrivers.Items.Clear() } catch {}
+    [System.Windows.Forms.Application]::DoEvents()
+
+    try {
+        $drivers = Get-InstalledDrivers
+        if (-not $drivers -or $drivers.Count -eq 0) {
+            [System.Windows.Forms.MessageBox]::Show("Không tìm thấy drivers hoặc quét thất bại.", "Thông báo", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            $lblDriverStats.Text = "Tổng số drivers: 0"
+            return
+        }
+
+        foreach ($drv in $drivers) {
+            # An toàn: chuyển mọi trường về string, thay bằng giá trị mặc định khi null
+            $name = if ($drv.Name) { $drv.Name.ToString() } else { "[Unknown]" }
+            $manufacturer = if ($drv.Manufacturer) { $drv.Manufacturer.ToString() } else { "Unknown" }
+            $version = if ($drv.Version) { $drv.Version.ToString() } else { "" }
+            $date = if ($drv.Date) { $drv.Date.ToString() } else { "" }
+            $status = if ($drv.Status) { $drv.Status.ToString() } else { "" }
+            $class = if ($drv.Class) { $drv.Class.ToString() } else { "" }
+
+            # Tạo item và thêm subitems từng cái một trong try/catch để tránh NullReference
+            $item = New-Object System.Windows.Forms.ListViewItem($name)
+            try { $null = $item.SubItems.Add($manufacturer) } catch { $null = $item.SubItems.Add("Unknown") }
+            try { $null = $item.SubItems.Add($version) } catch { $null = $item.SubItems.Add("") }
+            try { $null = $item.SubItems.Add($date) } catch { $null = $item.SubItems.Add("") }
+            try { $null = $item.SubItems.Add($status) } catch { $null = $item.SubItems.Add("") }
+            try { $null = $item.SubItems.Add($class) } catch { $null = $item.SubItems.Add("") }
+
+            # Thêm vào list (bọc try để tránh crash toàn bộ vòng lặp)
+            try { $null = $lstDrivers.Items.Add($item) } catch { Write-CleanupLog "Lỗi khi thêm item ListView: $($_.Exception.Message)" }
+        }
+
+        $lblDriverStats.Text = "Tổng số drivers: $($drivers.Count)"
+        if ($drivers.Count -gt 0) { $btnCheckDriverUpdates.Enabled = $true }
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Lỗi khi quét drivers: $($_.Exception.Message)", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        Write-CleanupLog "Lỗi quét drivers: $($_.Exception.Message)"
+    } finally {
+        $this.Text = "Driver Manager"
+        $this.Enabled = $true
+    }
+})
+
+
+$btnCheckDriverUpdates.Add_Click({
+    [System.Windows.Forms.MessageBox]::Show(
+        "Hướng dẫn kiểm tra driver updates:`n`n- Mở Settings > Windows Update > Optional updates`n- Hoặc dùng trang nhà sản xuất hoặc Snappy Driver Installer (open-source)",
+        "Kiểm tra Driver Updates",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Information
+    )
+    Start-Process "ms-settings:windowsupdate-optionalupdates"
+})
+
+$btnBackupDrivers.Add_Click({
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $backupPath = "$env:USERPROFILE\Desktop\DriverBackup_$timestamp"
+    $confirm = [System.Windows.Forms.MessageBox]::Show("Sao lưu drivers vào:`n$backupPath`nTiếp tục?", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+    $this.Enabled = $false
+    $this.Text = "Đang backup..."
+    [System.Windows.Forms.Application]::DoEvents()
+
+    $ok = Backup-Drivers -BackupPath $backupPath
+    if ($ok) {
+        [System.Windows.Forms.MessageBox]::Show("Đã sao lưu drivers thành công!`nVị trí: $backupPath", "Hoàn tất", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+    } else {
+        [System.Windows.Forms.MessageBox]::Show("Lỗi sao lưu drivers. Kiểm tra log.", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+    }
+
+    $this.Text = "Driver Manager"
+    $this.Enabled = $true
+})
 
 # --- SYSTEM INFO ---
 $infoPanel = New-Object System.Windows.Forms.Panel; $infoPanel.Size = New-Object System.Drawing.Size(965, 80); $infoPanel.Location = New-Object System.Drawing.Point(10, 550); $infoPanel.BackColor = [System.Drawing.Color]::WhiteSmoke; $infoPanel.BorderStyle = "FixedSingle"

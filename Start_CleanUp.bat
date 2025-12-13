@@ -1,48 +1,30 @@
 @echo off
-chcp 65001 >nul
-title Windows Cleanup Tool Launcher
+:: ---------------------------------------------------------
+:: LAUNCHER CHO CLEANUP TOOL (POWERSHELL)
+:: Tu dong chay voi quyen Admin va Bypass ExecutionPolicy
+:: ---------------------------------------------------------
 
-REM === Auto-detect script location (works anywhere) ===
-set "SCRIPT_DIR=%~dp0"
-set "SCRIPT_PATH=%SCRIPT_DIR%CleanUpTool.ps1"
+:: 1. Tu dong chuyen ve thu muc chua file nay
+cd /d "%~dp0"
 
-REM === Check if script exists ===
-if not exist "%SCRIPT_PATH%" (
-    echo.
-    echo [ERROR] Không tìm thấy file:  CleanUpTool.ps1
-    echo.
-    echo Vị trí tìm kiếm: %SCRIPT_PATH%
-    echo. 
-    echo Hãy đảm bảo file . bat và CleanUpTool.ps1 ở cùng thư mục! 
-    echo.
-    pause
-    exit /b 1
+:: 2. Kiem tra quyen Admin
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo Dang yeu cau quyen Administrator...
+    powershell -Command "Start-Process '%~0' -Verb RunAs"
+    exit /b
 )
 
-echo ============================================
-echo   Windows Cleanup Tool - Starting...
-echo ============================================
-echo. 
-echo Script location: %SCRIPT_PATH%
-echo. 
-
-REM === Run PowerShell as Admin with Bypass policy ===
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"%SCRIPT_PATH%\"' -Verb RunAs"
-
-REM === Check if PowerShell started successfully ===
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [ERROR] Không thể khởi động PowerShell! 
-    echo.
-    echo Lỗi có thể do:
-    echo  - Bạn click "Không" khi UAC hỏi quyền Admin
-    echo  - PowerShell bị vô hiệu hóa bởi Group Policy
-    echo. 
+:: 3. Kiem tra xem file PowerShell co ton tai khong
+if not exist "CleanUpTool.ps1" (
+    color 4F
+    echo [LOI] Khong tim thay file 'CleanUpTool.ps1'
+    echo Vui long dam bao file .bat va .ps1 nam cung mot thu muc!
     pause
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 
-echo. 
-echo [OK] Đã khởi động tool!  Cửa sổ PowerShell sẽ mở trong giây lát... 
-timeout /t 2 >nul
-exit /b 0
+:: 4. Chay file PowerShell (Giau cua so CMD den)
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "CleanUpTool.ps1"
+
+exit
